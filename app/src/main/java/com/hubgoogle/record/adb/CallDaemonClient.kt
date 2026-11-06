@@ -70,12 +70,26 @@ class CallDaemonClient(private val context: Context) {
     suspend fun stop(): String = withContext(Dispatchers.IO) { command("STOP") }
     suspend fun shutdown(): String = withContext(Dispatchers.IO) { command("SHUTDOWN") }
     suspend fun removeAllPending(): Int = withContext(Dispatchers.IO) {
-        var deleted = 0
-        for (id in pending()) {
-            if (command("DELETE " + id) == "DELETED") deleted++
-            else error("Cannot remove shell recording segment " + id)
+        // If an experimental notification-driven session is still open,
+        // stop its current PCM writer before clearing all shell segments.
+        if (status().startsWith("STATE CAPTURING")) {
+            val answer = stop()
+            check(answer.startsWith("STOPPED ") || answer.startsWith("ERR empty capture")) {
+                "Could not end active shell capture: " + answer
+            }
         }
-        deleted
+        var deleted = 0
+        repeat(1000) {
+            val ids = pending()
+            if (ids.isEmpty()) return@withContext deleted
+            for (id in ids) {
+                check(command("DELETE " + id) == "DELETED") {
+                    "Cannot remove shell recording segment " + id
+                }
+                deleted++
+            }
+        }
+        error("Too many pending segments during removal")
     }
 
     /** Copies exactly the daemon's raw 16-bit PCM output, then atomically finalizes a WAV. */
