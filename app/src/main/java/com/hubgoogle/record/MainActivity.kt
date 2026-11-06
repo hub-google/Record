@@ -27,6 +27,7 @@ import com.hubgoogle.record.core.DeviceProbe
 import com.hubgoogle.record.data.Recordings
 import com.hubgoogle.record.media.PlaybackCaptureService
 import com.hubgoogle.record.audio.FlacTranscoder
+import com.hubgoogle.record.audio.MultiTrackExporter
 import com.hubgoogle.record.data.RecordingDatabase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -298,7 +299,23 @@ private fun RecordScreen() {
                             style = MaterialTheme.typography.bodySmall)
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(onClick = {
+                        if (item.file.extension != "zip" && item.details?.source == "CALL_MIX") {
+                            val pair = MultiTrackExporter.findBestPair(item, recordings)
+                            if (pair != null) {
+                                OutlinedButton(onClick = {
+                                    scope.launch {
+                                        feedback = try {
+                                            val dest = withContext(Dispatchers.IO) {
+                                                MultiTrackExporter.export(context, pair)
+                                            }
+                                            recordings = library.list()
+                                            "多音軌封存完成：" + dest.name + "（兩路各自保留）"
+                                        } catch (e: Exception) { "多音軌封存失敗：" + e.message }
+                                    }
+                                }) { Text("匯出同期雙音軌") }
+                            }
+                        }
+                        if (item.file.extension != "zip") OutlinedButton(onClick = {
                             try { library.play(item.file); feedback = "播放：" + item.file.name }
                             catch (e: Exception) { feedback = "播放失敗：" + e.message }
                         }) { Text("播放") }

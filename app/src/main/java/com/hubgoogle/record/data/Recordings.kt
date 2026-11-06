@@ -18,7 +18,7 @@ class Recordings(private val context: Context) {
         val cleaned = prefix.replace(Regex("[^A-Za-z0-9_-]"), "").take(25).ifEmpty { "recording" }
         return File(dir, cleaned + "_" + System.currentTimeMillis() + "_" + java.util.UUID.randomUUID().toString().take(8) + ".wav")
     }
-    fun list(): List<RecordingFile> = dir.listFiles()?.filter { it.isFile && it.extension == "wav" || it.extension == "flac" }
+    fun list(): List<RecordingFile> = dir.listFiles()?.filter { it.isFile && it.extension in setOf("wav", "flac", "zip") }
         ?.sortedByDescending { it.lastModified() }?.map { RecordingFile(it, it.lastModified(), it.length(), database.details(it.name)) }.orEmpty()
     fun remove(file: File): Boolean {
         if (!isOwned(file) || !file.delete()) return false
@@ -31,7 +31,11 @@ class Recordings(private val context: Context) {
         val uri = FileProvider.getUriForFile(context, context.packageName + ".files", file)
         context.startActivity(Intent.createChooser(
             Intent(Intent.ACTION_SEND).apply {
-                type = if (file.extension.equals("flac", true)) "audio/flac" else "audio/wav"
+                type = when (file.extension.lowercase()) {
+                    "flac" -> "audio/flac"
+                    "zip" -> "application/zip"
+                    else -> "audio/wav"
+                }
                 putExtra(Intent.EXTRA_STREAM, uri)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }, "分享錄音"
