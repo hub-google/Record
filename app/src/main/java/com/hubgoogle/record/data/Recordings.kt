@@ -75,6 +75,12 @@ class Recordings(private val context: Context) {
         file.inputStream().buffered().use { input -> input.copyTo(destination) }
     }
 
+    fun deleteAll(): Int {
+        var deleted = 0
+        for (entry in list()) if (remove(entry.file)) deleted++
+        return deleted
+    }
+
     fun remove(file: File): Boolean {
         if (!isOwned(file) || !file.delete()) return false
         database.delete(file.name)
