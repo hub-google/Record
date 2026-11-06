@@ -34,6 +34,10 @@ class PlaybackCaptureService : Service() {
         const val ACTION_STOP = "com.hubgoogle.record.PLAYBACK_STOP"
         const val EXTRA_DATA = "projection_data"
         const val EXTRA_CODE = "projection_code"
+        @Volatile var liveLevel = 0
+            private set
+        @Volatile var startedElapsedMs = 0L
+            private set
         @Volatile var active = false
             private set
         @Volatile var lastStatus = "尚未錄製媒體聲音"
@@ -108,6 +112,8 @@ class PlaybackCaptureService : Service() {
             source.startRecording()
             check(source.recordingState == AudioRecord.RECORDSTATE_RECORDING)
             running.set(true); active = true
+            liveLevel = 0
+            startedElapsedMs = android.os.SystemClock.elapsedRealtime()
             lastStatus = "正在擷取允許錄製的音樂／遊戲聲音"
             val file = Recordings(this).newFile("media")
             val startNs = SystemClock.elapsedRealtimeNanos()
@@ -123,6 +129,18 @@ class PlaybackCaptureService : Service() {
                                 wav.append(buffer, 0, n)
                                 quality.add(buffer, n)
                                 digest.update(buffer, 0, n)
+                                var sum = 0.0
+                                var cursor = 0
+                                while (cursor + 1 < n) {
+                                    val sample = ((buffer[cursor + 1].toInt() shl 8) or
+                                        (buffer[cursor].toInt() and 255)).toShort().toInt()
+                                    sum += sample.toDouble() * sample
+                                    cursor += 2
+                                }
+                                val rms = kotlin.math.sqrt(sum / maxOf(1, cursor / 2))
+                                liveLevel = if (rms < 1) 0 else
+                                    ((20 * kotlin.math.log10(rms / 32768.0) + 60) / 0.6)
+                                        .toInt().coerceIn(0, 100)
                             }
                             else if (n < 0) throw IllegalStateException("AudioRecord error: " + n)
                         }
@@ -162,6 +180,7 @@ class PlaybackCaptureService : Service() {
     private fun stopCapture() {
         running.set(false)
         active = false
+        liveLevel = 0
         runCatching { recorder?.stop() }
     }
     override fun onDestroy() {

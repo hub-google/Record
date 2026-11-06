@@ -98,6 +98,10 @@ private fun RecordScreen() {
     var reportJson by remember { mutableStateOf("") }
     var monitorActive by remember { mutableStateOf(false) }
     var callState by remember { mutableStateOf("") }
+    var callLevel by remember { mutableIntStateOf(0) }
+    var callElapsedMs by remember { mutableLongStateOf(0L) }
+    var mediaLevel by remember { mutableIntStateOf(0) }
+    var mediaElapsedMs by remember { mutableLongStateOf(0L) }
     var mediaState by remember { mutableStateOf("") }
     var recordings by remember { mutableStateOf(library.list()) }
     var search by remember { mutableStateOf("") }
@@ -199,7 +203,20 @@ private fun RecordScreen() {
                 prefs.edit().putBoolean("needs_recovery", false).apply()
                 restartNotice = false
             }
+            if (daemonReady) {
+                val status = runCatching { daemon.status() }.getOrDefault("")
+                callLevel = Regex("LEVEL (\\d+)").find(status)?.groupValues?.getOrNull(1)
+                    ?.toIntOrNull()?.coerceIn(0, 100) ?: 0
+                callElapsedMs = Regex("ELAPSED_MS (\\d+)").find(status)?.groupValues?.getOrNull(1)
+                    ?.toLongOrNull() ?: 0L
+            } else {
+                callLevel = 0
+                callElapsedMs = 0L
+            }
             mediaActive = PlaybackCaptureService.active
+            mediaLevel = PlaybackCaptureService.liveLevel
+            mediaElapsedMs = if (mediaActive) android.os.SystemClock.elapsedRealtime() -
+                PlaybackCaptureService.startedElapsedMs else 0L
             monitorActive = CallMonitorService.running
             callState = CallMonitorService.lastStatus
             mediaState = PlaybackCaptureService.lastStatus
@@ -342,6 +359,9 @@ private fun RecordScreen() {
 
         RecordSection("3. 電信通話錄音") {
             Text(callState)
+            Text("通話音源實際輸入電平：" + callLevel + " / 100 · 錄製 " + callElapsedMs / 1000 + " 秒")
+            LinearProgressIndicator(progress = { callLevel / 100f }, modifier = Modifier.fillMaxWidth())
+            Text("現有空間：" + (context.filesDir.usableSpace / 1048576) + " MiB")
             Button(
                 enabled = consent && daemonReady && !monitorActive,
                 onClick = {
@@ -403,6 +423,8 @@ private fun RecordScreen() {
 
         RecordSection("4. 音樂、遊戲、App 內部聲音") {
             Text(mediaState)
+            Text("媒體實際輸入電平：" + mediaLevel + " / 100 · 錄製 " + mediaElapsedMs / 1000 + " 秒")
+            LinearProgressIndicator(progress = { mediaLevel / 100f }, modifier = Modifier.fillMaxWidth())
             Button(
                 enabled = consent && !mediaActive,
                 onClick = {

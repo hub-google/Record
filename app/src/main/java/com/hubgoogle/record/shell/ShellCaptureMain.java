@@ -29,6 +29,7 @@ public final class ShellCaptureMain {
     private volatile boolean capturing;
     private String sessionId;
     private long captureStartedNs = 0L;
+    private volatile int meterLevel = 0;
     private int selectedSource = MediaRecorder.AudioSource.VOICE_CALL;
     private String selectedName = "CALL_MIX";
     private File currentFile;
@@ -108,7 +109,9 @@ public final class ShellCaptureMain {
             write(out, "SELECTED " + selectedName);
         } else if (cmd.equals("STATUS")) {
             write(out, "STATE " + (capturing ? "CAPTURING" : "READY") + " " +
-                (sessionId == null ? "-" : sessionId) + " " + selectedName);
+                (sessionId == null ? "-" : sessionId) + " " + selectedName +
+                " LEVEL " + meterLevel + " ELAPSED_MS " +
+                (capturing ? (SystemClock.elapsedRealtimeNanos() - captureStartedNs) / 1000000L : 0L));
         } else if (cmd.equals("START")) {
             write(out, startCapture());
         } else if (cmd.equals("STOP")) {
@@ -167,6 +170,7 @@ public final class ShellCaptureMain {
                 if (input.getRecordingState() != AudioRecord.RECORDSTATE_RECORDING) throw new IllegalStateException("Start recording refused");
                 sessionId = UUID.randomUUID().toString();
                 captureStartedNs = SystemClock.elapsedRealtimeNanos();
+                meterLevel = 0;
                 currentFile = new File(ROOT, sessionId + ".pcm");
                 capturing = true;
                 final AudioRecord recorder = input;
@@ -187,7 +191,17 @@ public final class ShellCaptureMain {
         try (OutputStream file = new BufferedOutputStream(new FileOutputStream(output))) {
             while (capturing) {
                 int n = recorder.read(bytes, 0, bytes.length);
-                if (n > 0) file.write(bytes, 0, n);
+                if (n > 0) {
+                    file.write(bytes, 0, n);
+                    double power = 0;
+                    for (int i = 0; i + 1 < n; i += 2) {
+                        int sample = (short)(((bytes[i + 1] & 255) << 8) | (bytes[i] & 255));
+                        power += (double)sample * sample;
+                    }
+                    double rms = Math.sqrt(power / Math.max(1, n / 2));
+                    meterLevel = rms < 1 ? 0 : Math.max(0, Math.min(100,
+                        (int)((20 * Math.log10(rms / 32768.0) + 60) / 0.6)));
+                }
                 else if (n < 0) { lastError = "AudioRecord read " + n; break; }
             }
         } catch (IOException e) { lastError = e.toString(); }
