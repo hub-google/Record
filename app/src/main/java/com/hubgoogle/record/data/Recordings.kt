@@ -30,10 +30,41 @@ class Recordings(private val context: Context) {
         val cutoff = System.currentTimeMillis() - days.toLong() * 86_400_000L
         var deleted = 0
         for (file in dir.listFiles().orEmpty()) {
-            if (file.isFile && file.extension in setOf("wav", "flac", "zip")
+            if (file.isFile && file.extension in setOf("wav", "flac", "zip", "enc")
                 && file.lastModified() < cutoff && remove(file)) deleted++
         }
         return deleted
+    }
+
+    /**
+     * Rename inside the private directory; keep the original suffix so
+     * encrypted WAV/FLAC filenames remain round-trip decryptable.
+     */
+    fun rename(file: File, newBase: String): File {
+        check(isOwned(file) && file.isFile) { "Not a library recording" }
+        val safe = newBase.trim().replace(Regex("[^\\p{L}\\p{N} _-]"), "_").take(72).trim()
+        require(safe.isNotBlank()) { "Filename cannot be empty" }
+        val suffix = when {
+            file.name.endsWith(".wav.enc") -> ".wav.enc"
+            file.name.endsWith(".flac.enc") -> ".flac.enc"
+            file.name.endsWith(".zip.enc") -> ".zip.enc"
+            else -> "." + file.extension
+        }
+        val output = File(dir, safe + suffix)
+        check(!output.exists()) { "A recording with that filename already exists" }
+        check(file.renameTo(output)) { "Could not rename recording" }
+        try {
+            database.rename(file.name, output.name)
+        } catch (e: Exception) {
+            output.renameTo(file)
+            throw e
+        }
+        return output
+    }
+
+    fun copyTo(file: File, destination: java.io.OutputStream) {
+        check(isOwned(file) && file.isFile) { "Not a library recording" }
+        file.inputStream().buffered().use { input -> input.copyTo(destination) }
     }
 
     fun remove(file: File): Boolean {

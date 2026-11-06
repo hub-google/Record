@@ -108,6 +108,10 @@ class RecordingDatabase(context: Context) : SQLiteOpenHelper(context, "record_in
         writableDatabase.insertWithOnConflict("recordings", null, values, SQLiteDatabase.CONFLICT_REPLACE)
     }
 
+    fun rename(oldName: String, newName: String) {
+        val values = ContentValues().apply { put("filename", newName) }
+        writableDatabase.update("recordings", values, "filename=?", arrayOf(oldName))
+    }
     fun delete(filename: String): Boolean =
         writableDatabase.delete("recordings", "filename=?", arrayOf(filename)) >= 0
 }

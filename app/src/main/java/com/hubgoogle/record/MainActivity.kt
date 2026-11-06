@@ -94,6 +94,9 @@ private fun RecordScreen() {
     var mediaState by remember { mutableStateOf("") }
     var recordings by remember { mutableStateOf(library.list()) }
     var search by remember { mutableStateOf("") }
+    var renameFile by remember { mutableStateOf<String?>(null) }
+    var renameDraft by remember { mutableStateOf("") }
+    var exportFile by remember { mutableStateOf<java.io.File?>(null) }
     var waveformFile by remember { mutableStateOf<String?>(null) }
     var waveformData by remember { mutableStateOf<List<Float>>(emptyList()) }
 
@@ -128,6 +131,24 @@ private fun RecordScreen() {
         } catch (e: Exception) {
             feedback = "裝置驗證功能不可用：" + e.message
         }
+    }
+
+    val documentExport = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/octet-stream")
+    ) { uri ->
+        val source = exportFile
+        if (uri != null && source != null) {
+            scope.launch {
+                feedback = try {
+                    withContext(Dispatchers.IO) {
+                        val output = checkNotNull(context.contentResolver.openOutputStream(uri))
+                        output.use { library.copyTo(source, it) }
+                    }
+                    "已匯出檔案：" + source.name
+                } catch (e: Exception) { "匯出失敗：" + e.message }
+                exportFile = null
+            }
+        } else exportFile = null
     }
 
     val projectionLauncher = rememberLauncherForActivityResult(
@@ -495,11 +516,35 @@ private fun RecordScreen() {
                             }) { Text("轉 FLAC") }
                         }
                         OutlinedButton(onClick = {
+                            renameFile = item.file.name
+                            renameDraft = item.file.name.substringBeforeLast('.').removeSuffix(".wav").removeSuffix(".flac")
+                        }) { Text("重新命名") }
+                        OutlinedButton(onClick = {
+                            exportFile = item.file
+                            documentExport.launch(item.file.name)
+                        }) { Text("匯出") }
+                        OutlinedButton(onClick = {
                             if (library.remove(item.file)) {
                                 feedback = "已刪除：" + item.file.name
                                 recordings = library.list()
                             }
                         }) { Text("刪除") }
+                    }
+                    if (renameFile == item.file.name) {
+                        OutlinedTextField(value = renameDraft, onValueChange = { renameDraft = it },
+                            label = { Text("新的檔案名稱（不含副檔名）") },
+                            modifier = Modifier.fillMaxWidth(), singleLine = true)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(onClick = {
+                                feedback = try {
+                                    val result = library.rename(item.file, renameDraft)
+                                    recordings = library.list()
+                                    renameFile = null
+                                    "重新命名完成：" + result.name
+                                } catch (e: Exception) { "重新命名失敗：" + e.message }
+                            }) { Text("儲存名稱") }
+                            OutlinedButton(onClick = { renameFile = null }) { Text("取消") }
+                        }
                     }
                     if (waveformFile == item.file.name && waveformData.isNotEmpty()) {
                         val waveColor = MaterialTheme.colorScheme.primary
