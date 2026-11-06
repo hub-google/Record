@@ -89,6 +89,25 @@ class RecordingDatabase(context: Context) : SQLiteOpenHelper(context, "record_in
             )
         }
     }
+    fun duplicateMetadata(originalName: String, newName: String) {
+        val source = details(originalName) ?: return
+        val values = ContentValues().apply {
+            put("filename", newName)
+            put("source", source.source)
+            put("status", source.status)
+            put("duration_ms", source.durationMs)
+            put("sample_rate", source.sampleRate)
+            put("channels", source.channels)
+            put("rms", source.rms)
+            put("peak", source.peak)
+            put("zero_ratio", source.zeroRatio)
+            put("sha256", "")
+            put("started_elapsed_ns", source.startedElapsedNs)
+            put("created_at", System.currentTimeMillis())
+        }
+        writableDatabase.insertWithOnConflict("recordings", null, values, SQLiteDatabase.CONFLICT_REPLACE)
+    }
+
     fun delete(filename: String): Boolean =
         writableDatabase.delete("recordings", "filename=?", arrayOf(filename)) >= 0
 }

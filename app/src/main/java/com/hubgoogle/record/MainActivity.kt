@@ -26,6 +26,10 @@ import com.hubgoogle.record.call.CallMonitorService
 import com.hubgoogle.record.core.DeviceProbe
 import com.hubgoogle.record.data.Recordings
 import com.hubgoogle.record.media.PlaybackCaptureService
+import com.hubgoogle.record.audio.FlacTranscoder
+import com.hubgoogle.record.data.RecordingDatabase
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -302,6 +306,22 @@ private fun RecordScreen() {
                             try { library.share(item.file) }
                             catch (e: Exception) { feedback = "分享失敗：" + e.message }
                         }) { Text("分享") }
+                        if (item.file.extension == "wav") {
+                            OutlinedButton(onClick = {
+                                scope.launch {
+                                    feedback = "正在將 PCM WAV 無損轉為 FLAC"
+                                    feedback = try {
+                                        val flac = withContext(Dispatchers.IO) {
+                                            FlacTranscoder.convert(item.file).also {
+                                                RecordingDatabase(context).duplicateMetadata(item.file.name, it.name)
+                                            }
+                                        }
+                                        recordings = library.list()
+                                        "已轉換 FLAC：" + flac.name
+                                    } catch (e: Exception) { "FLAC 轉換失敗：" + e.message }
+                                }
+                            }) { Text("轉 FLAC") }
+                        }
                         OutlinedButton(onClick = {
                             if (library.remove(item.file)) {
                                 feedback = "已刪除：" + item.file.name
