@@ -89,6 +89,35 @@ public final class ShellCaptureMain {
     private void write(BufferedOutputStream out, String s) throws IOException {
         out.write((s + "\n").getBytes(StandardCharsets.UTF_8)); out.flush();
     }
+    private static final java.util.regex.Pattern SESSION_ID =
+        java.util.regex.Pattern.compile("[0-9a-fA-F-]{36}");
+
+    private File sessionMetadata(String id) { return new File(ROOT, id + ".info"); }
+
+    private long[] readSessionClockAndSource(String id) {
+        if (!SESSION_ID.matcher(id).matches()) return new long[]{0L, 0L};
+        File metadata = sessionMetadata(id);
+        if (!metadata.isFile()) return new long[]{0L, 0L};
+        try (BufferedReader input = new BufferedReader(new FileReader(metadata))) {
+            long timestamp = Long.parseLong(input.readLine());
+            int sourceIndex = Integer.parseInt(input.readLine());
+            if (timestamp <= 0 || sourceIndex < 0 || sourceIndex > 2) return new long[]{0L, 0L};
+            return new long[]{timestamp, sourceIndex};
+        } catch (Exception ignored) { return new long[]{0L, 0L}; }
+    }
+
+    private static String hashFile(File file) throws Exception {
+        java.security.MessageDigest digest = java.security.MessageDigest.getInstance("SHA-256");
+        try (InputStream input = new BufferedInputStream(new FileInputStream(file))) {
+            byte[] buffer = new byte[65536];
+            int count;
+            while ((count = input.read(buffer)) != -1) digest.update(buffer, 0, count);
+        }
+        StringBuilder hex = new StringBuilder();
+        for (byte b : digest.digest()) hex.append(String.format(java.util.Locale.ROOT, "%02x", b & 255));
+        return hex.toString();
+    }
+
     private void handle(Socket socket) throws Exception {
         BufferedInputStream in = new BufferedInputStream(socket.getInputStream());
         BufferedOutputStream out = new BufferedOutputStream(socket.getOutputStream());
@@ -123,8 +152,11 @@ public final class ShellCaptureMain {
             if (capturing || !f.isFile() || !f.getCanonicalFile().getParentFile().equals(ROOT.getCanonicalFile())) {
                 write(out, "ERR file unavailable"); return;
             }
+            long[] recovered = readSessionClockAndSource(id);
+            long began = recovered[0];
+            String name = new String[]{"CALL_MIX", "CALL_TX", "CALL_RX"}[(int)recovered[1]];
             write(out, "FILE " + f.length() + " " + RATE + " " + CHANNELS + " " +
-                (id.equals(sessionId) ? captureStartedNs : 0) + " " + selectedName);
+                began + " " + name + " " + hashFile(f));
             try (InputStream stream = new BufferedInputStream(new FileInputStream(f))) {
                 byte[] bytes = new byte[32768]; int n;
                 while ((n = stream.read(bytes)) != -1) out.write(bytes, 0, n);
@@ -134,7 +166,10 @@ public final class ShellCaptureMain {
             String id = cmd.substring(7);
             if (!id.matches("[0-9a-fA-F-]{36}") || capturing) { write(out, "ERR invalid state"); return; }
             File f = new File(ROOT, id + ".pcm");
-            write(out, f.delete() || !f.exists() ? "DELETED" : "ERR cannot delete");
+            boolean removed = f.delete() || !f.exists();
+            File meta = sessionMetadata(id);
+            if (removed) meta.delete();
+            write(out, removed ? "DELETED" : "ERR cannot delete");
         } else if (cmd.equals("PENDING")) {
             StringBuilder pending = new StringBuilder("PENDING");
             File[] files = ROOT.listFiles((dir, name) -> name.matches("[0-9a-fA-F-]{36}\\.pcm"));
@@ -172,6 +207,13 @@ public final class ShellCaptureMain {
                 captureStartedNs = SystemClock.elapsedRealtimeNanos();
                 meterLevel = 0;
                 currentFile = new File(ROOT, sessionId + ".pcm");
+                // Persist source and monotonic start before creating the capture
+                // worker; this survives daemon crashes and subsequent recovery.
+                try (FileWriter metadata = new FileWriter(sessionMetadata(sessionId))) {
+                    metadata.write(Long.toString(captureStartedNs) + "\n");
+                    metadata.write(Integer.toString(
+                        selectedName.equals("CALL_TX") ? 1 : selectedName.equals("CALL_RX") ? 2 : 0) + "\n");
+                }
                 capturing = true;
                 final AudioRecord recorder = input;
                 final File output = currentFile;

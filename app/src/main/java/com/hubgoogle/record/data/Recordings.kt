@@ -14,6 +14,12 @@ data class RecordingFile(val file: File, val modified: Long, val size: Long, val
 class Recordings(private val context: Context) {
     private val dir = File(context.filesDir, "recordings").apply { mkdirs() }
     private val database by lazy { RecordingDatabase(context) }
+    /** Deterministic name for shell session recovery and idempotent fetch. */
+    fun sessionFile(prefix: String, sessionId: String): File {
+        require(Regex("[0-9a-fA-F-]{36}").matches(sessionId))
+        val stem = prefix.replace(Regex("[^a-zA-Z0-9_-]"), "").take(20)
+        return File(dir, stem + "_" + sessionId + ".wav")
+    }
     fun newFile(prefix: String): File {
         val cleaned = prefix.replace(Regex("[^A-Za-z0-9_-]"), "").take(25).ifEmpty { "recording" }
         return File(dir, cleaned + "_" + System.currentTimeMillis() + "_" + java.util.UUID.randomUUID().toString().take(8) + ".wav")

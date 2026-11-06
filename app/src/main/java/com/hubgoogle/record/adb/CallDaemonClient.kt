@@ -73,13 +73,14 @@ class CallDaemonClient(private val context: Context) {
     /** Copies exactly the daemon's raw 16-bit PCM output, then atomically finalizes a WAV. */
     suspend fun fetch(sessionId: String): java.io.File = withContext(Dispatchers.IO) {
         require(Regex("[0-9a-fA-F-]{36}").matches(sessionId))
-        val file = Recordings(context).newFile("call")
+        val file = Recordings(context).sessionFile("call", sessionId)
         val quality = QualityAccumulator()
         val digest = MessageDigest.getInstance("SHA-256")
         var actualRate = 0
         var actualChannels = 0
         var sourceName = "CALL_MIX"
         var sourceStartNs = 0L
+        var expectedHash = ""
         open().use { socket ->
             socket.soTimeout = 30_000
             val input = BufferedInputStream(socket.getInputStream())
@@ -88,7 +89,7 @@ class CallDaemonClient(private val context: Context) {
             output.flush()
             check(readLine(input) == "OK") { "Authentication failed" }
             val info = readLine(input).split(" ")
-            check(info.size == 6 && info[0] == "FILE") { "Unsupported daemon protocol: " + info.joinToString(" ") }
+            check(info.size == 7 && info[0] == "FILE") { "Unsupported daemon protocol: " + info.joinToString(" ") }
             val count = info[1].toLong()
             val rate = info[2].toInt()
             val channels = info[3].toInt()
@@ -96,8 +97,34 @@ class CallDaemonClient(private val context: Context) {
             actualChannels = channels
             sourceStartNs = info[4].toLong()
             sourceName = info[5]
+            expectedHash = info[6].lowercase()
+            check(Regex("[a-f0-9]{64}").matches(expectedHash)) { "Invalid SHA-256" }
             check(sourceName in setOf("CALL_MIX", "CALL_TX", "CALL_RX")) { "Unknown audio source" }
             check(count in 2L..512_000_000L && count % 2 == 0L) { "Empty, invalid or oversized PCM segment" }
+            if (file.exists()) {
+                check(file.length() == count + 44) { "Existing recovered file size mismatch" }
+                val previousHash = MessageDigest.getInstance("SHA-256")
+                val existingQuality = QualityAccumulator()
+                file.inputStream().use { stream ->
+                    check(stream.skip(44L) == 44L)
+                    val existingBuffer = ByteArray(32768)
+                    while (true) {
+                        val got = stream.read(existingBuffer)
+                        if (got < 0) break
+                        previousHash.update(existingBuffer, 0, got)
+                        existingQuality.add(existingBuffer, got)
+                    }
+                }
+                val existingDigest = previousHash.digest().joinToString("") {
+                    "%02x".format(it.toInt() and 255)
+                }
+                check(existingDigest == expectedHash) { "Existing file checksum differs from daemon" }
+                // Complete metadata repair if the prior attempt crashed after commit.
+                RecordingDatabase(context).save(file, sourceName, rate, channels,
+                    existingQuality.result(), expectedHash, sourceStartNs)
+                check(command("DELETE " + sessionId) == "DELETED")
+                return@withContext file
+            }
             WavPcmFile(file, rate, channels).use { wav ->
                 var remaining = count
                 val buffer = ByteArray(32768)
@@ -109,6 +136,10 @@ class CallDaemonClient(private val context: Context) {
                     digest.update(buffer, 0, read)
                     remaining -= read
                 }
+                val actualHash = digest.digest().joinToString("") {
+                    "%02x".format(it.toInt() and 255)
+                }
+                check(actualHash == expectedHash) { "Transferred PCM failed SHA-256 verification" }
                 wav.commit()
             }
         }
@@ -118,7 +149,7 @@ class CallDaemonClient(private val context: Context) {
         // post-call file transfer. This makes media/call overlap calculations valid.
         val startNs = if (sourceStartNs > 0L) sourceStartNs else 0L
         RecordingDatabase(context).save(file, sourceName, actualRate, actualChannels,
-            stats, digest.digest().joinToString("") { "%02x".format(it.toInt() and 0xff) },
+            stats, expectedHash,
             startNs)
         check(command("DELETE " + sessionId) == "DELETED") { "Shell segment cleanup failed" }
         file
