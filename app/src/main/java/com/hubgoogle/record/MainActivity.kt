@@ -26,6 +26,9 @@ import com.hubgoogle.record.call.CallMonitorService
 import com.hubgoogle.record.core.DeviceProbe
 import com.hubgoogle.record.data.Recordings
 import com.hubgoogle.record.media.PlaybackCaptureService
+import com.hubgoogle.record.audio.WavWaveform
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.geometry.Offset
 import com.hubgoogle.record.audio.FlacTranscoder
 import com.hubgoogle.record.audio.MultiTrackExporter
 import com.hubgoogle.record.security.SecureVault
@@ -78,6 +81,9 @@ private fun RecordScreen() {
     var callState by remember { mutableStateOf("") }
     var mediaState by remember { mutableStateOf("") }
     var recordings by remember { mutableStateOf(library.list()) }
+    var search by remember { mutableStateOf("") }
+    var waveformFile by remember { mutableStateOf<String?>(null) }
+    var waveformData by remember { mutableStateOf<List<Float>>(emptyList()) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -314,8 +320,17 @@ private fun RecordScreen() {
                 feedback = if (retentionDays == 0) "未啟用自動清理" else "已清除 " + count + " 個過期檔案"
             }, modifier = Modifier.fillMaxWidth()) { Text("立即執行保留期限清理") }
             Button(onClick = { recordings = library.list() }, modifier = Modifier.fillMaxWidth()) { Text("重新整理錄音列表") }
-            if (recordings.isEmpty()) Text("目前沒有錄音")
-            recordings.forEach { item ->
+            OutlinedTextField(
+                value = search, onValueChange = { search = it },
+                label = { Text("搜尋檔名或音訊來源") },
+                singleLine = true, modifier = Modifier.fillMaxWidth()
+            )
+            val shown = recordings.filter { entry ->
+                search.isBlank() || entry.file.name.contains(search, ignoreCase = true) ||
+                    entry.details?.source?.contains(search, ignoreCase = true) == true
+            }
+            if (shown.isEmpty()) Text(if (search.isBlank()) "目前沒有錄音" else "沒有符合搜尋條件的錄音")
+            shown.forEach { item ->
                 Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(item.file.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                     Text(item.displayDate + " · " + (item.size / 1024) + " KiB", style = MaterialTheme.typography.bodySmall)
@@ -324,7 +339,22 @@ private fun RecordScreen() {
                             info.sampleRate + " Hz / " + info.channels + " 聲道",
                             style = MaterialTheme.typography.bodySmall)
                     }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        if (item.file.extension == "wav") {
+                            OutlinedButton(onClick = {
+                                scope.launch {
+                                    feedback = "正在分析 WAV 波形"
+                                    waveformData = withContext(Dispatchers.IO) {
+                                        WavWaveform.peaks(item.file, 96)
+                                    }
+                                    waveformFile = item.file.name
+                                    feedback = "已完成 WAV 波形分析"
+                                }
+                            }) { Text("波形") }
+                        }
                         if (item.file.extension == "enc") {
                             OutlinedButton(onClick = {
                                 scope.launch {
@@ -397,6 +427,19 @@ private fun RecordScreen() {
                                 recordings = library.list()
                             }
                         }) { Text("刪除") }
+                    }
+                    if (waveformFile == item.file.name && waveformData.isNotEmpty()) {
+                        val waveColor = MaterialTheme.colorScheme.primary
+                        Canvas(Modifier.fillMaxWidth().height(60.dp)) {
+                            val half = size.height / 2
+                            val step = size.width / waveformData.size
+                            waveformData.forEachIndexed { index, value ->
+                                val rise = value.coerceIn(0f, 1f) * half
+                                val x = (index + 0.5f) * step
+                                drawLine(waveColor, Offset(x, half - rise), Offset(x, half + rise),
+                                    strokeWidth = maxOf(1.5f, step * 0.52f))
+                            }
+                        }
                     }
                     HorizontalDivider()
                 }
