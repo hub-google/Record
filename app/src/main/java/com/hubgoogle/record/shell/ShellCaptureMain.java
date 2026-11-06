@@ -109,7 +109,7 @@ public final class ShellCaptureMain {
                 AudioFormat format = new AudioFormat.Builder().setEncoding(AudioFormat.ENCODING_PCM_16BIT)
                     .setSampleRate(RATE).setChannelMask(AudioFormat.CHANNEL_IN_MONO).build();
                 input = new AudioRecord.Builder().setAudioSource(MediaRecorder.AudioSource.VOICE_CALL)
-                    .setAudioFormat(format).setBufferSizeInBytes(Math.max(min * 2, 8192)).build();
+                    .setContext(new ShellAudioContext()).setAudioFormat(format).setBufferSizeInBytes(Math.max(min * 2, 8192)).build();
                 if (input.getState() != AudioRecord.STATE_INITIALIZED) throw new IllegalStateException("AudioRecord init denied");
                 input.startRecording();
                 if (input.getRecordingState() != AudioRecord.RECORDSTATE_RECORDING) throw new IllegalStateException("Start recording refused");

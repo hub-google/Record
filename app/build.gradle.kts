@@ -4,7 +4,7 @@ plugins {
 }
 android {
     namespace = "com.hubgoogle.record"
-    compileSdk = 36
+    compileSdk = 37
     defaultConfig {
         applicationId = "com.hubgoogle.record"
         minSdk = 31

@@ -16,13 +16,13 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-      - name: Prepare Android 36 SDK
+      - name: Prepare Android 37 SDK
         run: |
           SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
-          if [ ! -f "$SDK/platforms/android-36/android.jar" ]; then
+          if [ ! -f "$SDK/platforms/android-37/android.jar" ]; then
             SDKMANAGER="$(find "$SDK/cmdline-tools" -type f -name sdkmanager -print -quit)"
             test -n "$SDKMANAGER"
-            "$SDKMANAGER" --install "platforms;android-36" "build-tools;36.0.0"
+            "$SDKMANAGER" --install "platforms;android-37" "build-tools;36.0.0"
           fi
           test -f "$SDK/platforms/android-36/android.jar"
       - uses: gradle/actions/setup-gradle@v4
