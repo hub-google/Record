@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import com.hubgoogle.record.adb.CallDaemonClient
 import com.hubgoogle.record.adb.ShellBootstrap
 import com.hubgoogle.record.call.CallMonitorService
+import com.hubgoogle.record.call.RecoveryScheduler
 import com.hubgoogle.record.core.DeviceProbe
 import com.hubgoogle.record.data.Recordings
 import com.hubgoogle.record.media.PlaybackCaptureService
@@ -78,6 +79,7 @@ private fun RecordScreen() {
     val library = remember { Recordings(context) }
     var consent by remember { mutableStateOf(prefs.getBoolean("consent", false)) }
     var biometricLock by remember { mutableStateOf(prefs.getBoolean("biometricLock", false)) }
+    var autoRestore by remember { mutableStateOf(prefs.getBoolean("autoRestore", false)) }
     var retentionDays by remember { mutableIntStateOf(prefs.getInt("retentionDays", 0)) }
     var restartNotice by remember { mutableStateOf(prefs.getBoolean("needs_recovery", false)) }
     var pairPort by remember { mutableStateOf("") }
@@ -274,6 +276,21 @@ private fun RecordScreen() {
                     scope.launch { feedback = daemon.shutdown(); daemonReady = daemon.ping() }
                 }, modifier = Modifier.fillMaxWidth()) { Text("停止通話錄音核心") }
             }
+            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                Switch(checked = autoRestore, onCheckedChange = { enabled ->
+                    if (!consent) {
+                        feedback = "請先閱讀並勾選錄音合規聲明"
+                    } else {
+                        autoRestore = enabled
+                        RecoveryScheduler.setEnabled(context, enabled)
+                        feedback = if (enabled) "已啟用 WorkManager 背景恢復（非即時，須 Wi-Fi／系統允許）" else "已關閉背景自動恢復"
+                    }
+                })
+                Text("允許背景排程嘗試恢復錄音核心", modifier = Modifier.padding(start = 8.dp))
+            }
+            Text(prefs.getString("lastRecovery", "尚未有背景恢復紀錄") ?: "", style = MaterialTheme.typography.bodySmall)
+            Text("背景排程通常最快 15 分鐘，不保證重新開機後立即錄音；系統或廠牌可能限制此功能。",
+                style = MaterialTheme.typography.bodySmall)
             Text("若裝置無法提供 VOICE_CALL 音源，會顯示失敗，而不使用喇叭外放再收音。",
                 style = MaterialTheme.typography.bodySmall)
         }

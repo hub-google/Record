@@ -39,7 +39,9 @@ class BootRestoreReceiver : BroadcastReceiver() {
         manager.notify(56, Notification.Builder(context, "record.restore")
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
             .setContentTitle("Record 需恢復通話錄音服務")
-            .setContentText("裝置重新開機後，請開啟 Record 檢查 ADB 與錄音狀態")
+            .setContentText(if (preferences.getBoolean("autoRestore", false))
+                "已安排背景恢復檢查；尚未成功前不會顯示為就緒"
+                else "裝置重新開機後，請開啟 Record 檢查 ADB 與錄音狀態")
             .setContentIntent(launch).setAutoCancel(true).build())
     }
 }
