@@ -727,6 +727,34 @@ private fun RecordScreen() {
             }, modifier = Modifier.fillMaxWidth()) { Text("匯出匿名設備相容性診斷 JSON") }
             Text("不包含電話號碼、錄音檔、配對碼或 ADB token。", style = MaterialTheme.typography.bodySmall)
         }
+        RecordSection("隱私、告知及錄音資料清除") {
+            Text("音訊與索引只保存在手機。分享及匯出由你主動操作，完整說明請閱讀 GitHub PRIVACY.md。")
+            OutlinedButton(
+                enabled = !monitorActive && !mediaActive && manualId == null,
+                onClick = { clearConfirmation = true },
+                modifier = Modifier.fillMaxWidth()
+            ) { Text("清除所有錄音檔") }
+            Text("ADB 系統配對撤銷需要另外到 Android 開發人員選項操作。",
+                style = MaterialTheme.typography.bodySmall)
+            if (clearConfirmation) {
+                AlertDialog(
+                    onDismissRequest = { clearConfirmation = false },
+                    title = { Text("確定刪除所有錄音？") },
+                    text = { Text("將永久刪除本機 WAV、FLAC、M4A、OGG、加密檔與 ZIP 封存。此操作無法復原。") },
+                    confirmButton = {
+                        Button(onClick = {
+                            val count = library.deleteAll()
+                            recordings = library.list()
+                            clearConfirmation = false
+                            feedback = "已永久刪除 " + count + " 個本機音檔"
+                        }) { Text("永久刪除") }
+                    },
+                    dismissButton = {
+                        OutlinedButton(onClick = { clearConfirmation = false }) { Text("取消") }
+                    }
+                )
+            }
+        }
         Text("相容性仍須以實體 Android 手機驗證。版本 0.1.0-dev，沒有雲端上傳或登入。", style = MaterialTheme.typography.bodySmall)
         Spacer(Modifier.height(24.dp))
     }
