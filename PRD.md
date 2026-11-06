@@ -1,6 +1,6 @@
 # Record — Android 非 Root 通話／內部音訊錄製產品需求書（PRD）
 
-> 版本：v1.0（規劃草案）｜日期：2026-11-06｜狀態：尚未開發、尚未完成實機可行性驗證
+> 版本：v1.1（開發對照）｜日期：2026-11-06｜狀態：Android 原始碼及 CI 已建立；實機可行性／正式驗收未完成
 >
 > 對應技術文件：[TECHNICAL.md](./TECHNICAL.md)；專案：https://github.com/hub-google/Record
 
@@ -168,4 +168,4 @@
 - 第三個「成功」才是通話期間的遊戲／音樂並行擷取；若無法證明，不對外宣稱支援。
 - 所有功能規格均受裝置相容性、Android 安全模型、第三方 App 的 capture policy，以及當地錄音法律約束。
 
-> 本 PRD 是後續開發基線，**不是已完成或已測試成功的宣告**。
+> 本 PRD 是產品驗收基線；最新開發情況請看 [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md)。**仍缺實機 P0–P3 驗收證據**。
