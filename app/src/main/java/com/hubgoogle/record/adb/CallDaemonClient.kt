@@ -119,6 +119,15 @@ class CallDaemonClient(private val context: Context) {
                     "%02x".format(it.toInt() and 255)
                 }
                 check(existingDigest == expectedHash) { "Existing file checksum differs from daemon" }
+                // Drain this socket's already-started FETCH body before issuing
+                // DELETE: the daemon serves one command at a time.
+                val discard = ByteArray(32768)
+                var bytesLeft = count
+                while (bytesLeft > 0) {
+                    val n = input.read(discard, 0, minOf(bytesLeft, discard.size.toLong()).toInt())
+                    if (n < 0) throw java.io.EOFException("Truncated redundant transfer")
+                    bytesLeft -= n
+                }
                 // Complete metadata repair if the prior attempt crashed after commit.
                 RecordingDatabase(context).save(file, sourceName, rate, channels,
                     existingQuality.result(), expectedHash, sourceStartNs)
