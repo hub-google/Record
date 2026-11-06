@@ -26,8 +26,8 @@ object MultiTrackExporter {
 
     fun findBestPair(call: RecordingFile, candidates: List<RecordingFile>): TrackPair? {
         val callInfo = call.details ?: return null
-        if (callInfo.source != "CALL_MIX") return null
-        return candidates.asSequence().filter { it.details?.source == "MEDIA_PLAYBACK" }
+        if (callInfo.source != "CALL_MIX" || call.file.extension == "enc") return null
+        return candidates.asSequence().filter { it.details?.source == "MEDIA_PLAYBACK" && it.file.extension != "enc" }
             .mapNotNull { media ->
                 val info = media.details ?: return@mapNotNull null
                 val callStart = callInfo.startedElapsedNs

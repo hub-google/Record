@@ -351,7 +351,7 @@ private fun RecordScreen() {
                                 }
                             }) { Text("加密") }
                         }
-                        if (item.file.extension != "zip" && item.details?.source == "CALL_MIX") {
+                        if (item.file.extension !in setOf("enc", "zip") && item.details?.source == "CALL_MIX") {
                             val pair = MultiTrackExporter.findBestPair(item, recordings)
                             if (pair != null) {
                                 OutlinedButton(onClick = {
