@@ -1,39 +1,34 @@
-# Record — Android 非 Root 音訊錄製
+# Record — Android 非 Root 通話與內部音訊錄製
 
-[產品需求書](PRD.md) · [技術說明書](TECHNICAL.md) · [參考專案授權](NOTICE.md)
+[PRD（產品需求）](PRD.md) · [技術設計](TECHNICAL.md) · [開發驗收狀態](IMPLEMENTATION_STATUS.md) · [測試計畫](TEST_PLAN.md) · [GitHub Actions](https://github.com/hub-google/Record/actions)
 
-## 目前內容
+**Android 12+ 原生原始碼專案。開發中，未經實機電話錄音驗證；按需求不產出或發佈 APK。**
 
-此儲存庫已包含 **Android 原始碼開發版（0.1.0-dev）**，尚未經 Android 編譯 CI 或實體裝置完整驗證。依需求**不發佈 APK**。
+## 目前實作
 
-- Kotlin / Jetpack Compose 操作介面，中文設定精靈、錄音庫、權限與裝置診斷。
-- **免 Root** 的使用者主動無線 ADB 配對與本機 ADB 連線。ADB client 依 JemRec (Apache-2.0) 授權改寫。
-- shell 端通話錄音 daemon（AudioRecord VOICE_CALL，16kHz mono PCM），本機身份驗證 socket，App 收取後輸出 WAV。
-- Android MediaProjection + AudioPlaybackCapture 遵循系統授權的音樂／遊戲聲音錄製（48kHz stereo PCM/WAV）。
-- 以 TelephonyCallback 監控電信通話狀態；支援使用者手動／自動開始與停止。
-- 本機 WAV 檔案列表、播放、分享、刪除、基本音訊品質檢查與 JUnit 測試。
-- GitHub Actions：執行來源編譯與單元測試，**不建立／上傳 APK**。
+- 使用者主動的免 Root 無線 ADB 配對，將錄音程序以 shell UID 啟動，從 Android 的 VOICE_CALL 音源嘗試擷取通話音訊。
+- 使用者授權 MediaProjection 後錄製允許被擷取的音樂／遊戲播放音訊。
+- 16-bit PCM → WAV；Android MediaCodec FLAC 無損轉換（須由設備支援）。
+- 自動和手動電信通話錄音控制、前景狀態通知、重啟提醒、恢復待收取的 shell 錄音片段。
+- 將重疊的通話及媒體錄音封存成含時間戳 JSON 的多軌 ZIP；不是宣稱分開 TX/RX，也未證明每支手機都能同時擷取。
+- 本機 SQLite 錄音索引、音量／靜音品質判定、播放、分享、刪除、7/30/90 天保留期限。
+- Android Keystore AES-256-GCM 選擇性加密與解密；加密音訊先驗證成功後才可移除明文。
+- Compose 介面、JUnit 測試及 GitHub Actions 原始碼編譯。原始碼授權見 [NOTICE.md](NOTICE.md)、[LICENSE-APACHE-2.0](LICENSE-APACHE-2.0)。
 
-## 執行前提
+## 不符合或尚未驗收
 
-Android 12+，Android Studio/Gradle Wrapper 9.7.1 和 Android SDK 36。將專案以 Android Studio 開啟，允許 Gradle 同步，在手機上由自己安裝並測試。
+**最重要：** 還沒有真實 Android 手機執行的 ADB 配對與雙向通話錄音測試結果。必須在受控且依法取得同意的實機上做驗證，不能因程式碼能編譯就宣稱通話實際可用。
 
-初次使用需授權 RE​​CORD_AUDIO／READ_PHONE_STATE，在開發人員選項打開無線偵錯，手機對自己完成一次性六碼配對，再輸入無線偵錯連接埠，啟動 shell daemon。這些設定和手機相容性取決於 OEM；**一般無 Root APK 無法直接取得受保護的 VOICE_CALL 音源**。
+尚未完成完整的 FLAC 解碼驗證、各 OEM 相容性、可靠自動開機恢復、真正 uplink/downlink 獨立音軌、漂移補償、VoIP 自動識別、全文檢索／波形圖／生物辨識介面。詳細落差參閱 [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md)。
 
-此版 daemon 直接透過安裝 APK 作為 app_process classpath，在部分系統可能因 SELinux、APK classloader 或權限限制而無法啟動，會顯示錯誤。不得將 UI 可操作等同於實機通話雙向錄音成功。
+**此 App 不使用 Google Phone 內建錄音流程，也不提供繞過系統安全通知或當地錄音告知／同意義務的功能。**
 
-## 重要限制
+## 開發
 
-- **不得假裝全部已完成**：多音軌／通話加媒體同步、TX/RX 真實分離、FLAC、跨廠牌兼容、重啟自動恢復、完整加密資料庫與正式商店發佈仍待實作及測試。
-- 本專案不呼叫 Google Phone 的內建通話錄音按鈕，但不提供規避 Android 安全通知或法律要求的功能。
-- 使用者須在需要的情況下取得通話對方同意；切勿將私人錄音提交公開 GitHub。
-- MediaProjection 無法錄製拒絕擷取的 App，以及 Android 保護的語音通話用途。來源靜音不代表錄製成功。
+以 Android Studio 開啟專案，Android SDK 36、Gradle Wrapper 9.7.1 和 JDK 21；執行：
 
-## CI
+```bash
+./gradlew :app:compileDebugKotlin :app:compileDebugJavaWithJavac :app:testDebugUnitTest
+```
 
-提交 main 後查看 [Actions](https://github.com/hub-google/Record/actions)。工作流程僅執行 Gradle 編譯與 unit test，不產生可下載 APK。
-
-## 來源
-
-參考 JemRec、scrcpy、CallVault、ShizuCallRecorder 等 Repo 的取捨與授權，詳見 [TECHNICAL.md](TECHNICAL.md)。
-
+CI 只做原始碼編譯與測試，不發佈或上傳 APK。Android 12+ 真機需自行完成無線偵錯配對；不安裝 Root／Magisk／KernelSU。
