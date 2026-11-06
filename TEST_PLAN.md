@@ -72,8 +72,10 @@
 - PCM 靜音辨識、峰值及 clipping 判斷。
 - PCM → WAV 正確 44-byte RIFF header、檔案內容一致。
 - 音訊不完整時不提交成可供播放的 WAV。
+- WAV 波形資料抽樣及峰值。
+- 通話與媒體音訊來源的時間重疊匹配、加密來源排除（已加入測試碼）。
 
-需再補：FLAC 媒體編碼器真機測試、AES AndroidKeyStore 真機測試、shell daemon IPC 端到端測試、AudioPlaybackCapture 授權 UI instrumentation、ZIP 解壓及 JSON 同步測試。
+需再補：FLAC 媒體編碼器真機測試、AES AndroidKeyStore 真機測試、shell daemon IPC 端到端測試、AudioPlaybackCapture 授權 UI instrumentation、ZIP 解壓及 JSON 同步測試（目前只有配對邏輯單測）。
 
 ## 實機證據規範
 
