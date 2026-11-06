@@ -32,3 +32,16 @@
 ```
 
 CI 只做原始碼編譯與測試，不發佈或上傳 APK。Android 12+ 真機需自行完成無線偵錯配對；不安裝 Root／Magisk／KernelSU。
+
+## 2026-11-06 追加開發項目
+
+已提交完整原始碼的增量功能：
+- CALL_MIX / CALL_TX / CALL_RX 手動音源選擇；通話 16 MiB 分段；每段存開始時間、來源與 SHA-256，UUID 防重複收取；媒體 32 MiB 分段及低空間保護。
+- WAV、FLAC、AAC/M4A、Opus/Ogg；錄音庫搜尋、重新命名、波形、播放、加密、系統文件匯出、清除與留存規則。
+- 使用者自主許可的 VoIP 通知分類偵測、通話失敗及靜音通知、可選背景自癒。
+- 440Hz / 880Hz 原創測試音播放及回放檢測、裝置相容性結果人工標記與匿名 JSON 匯出。
+- PCM 音質、WAV 原子保存、測試頻譜與多音軌 ZIP JSON 的 JVM 單元測試。
+
+**狀態：** GitHub CI 的綠色檢查只保證原始碼編譯與單元測試通過；本工作環境無法操作實體手機或發起真正的雙方同意通話，因此 PRD 要求的 3 品牌 × 每機 10 次真實雙向通話、60 分鐘通話、VoIP／藍牙／重開機、通話＋媒體互斥測試都仍未驗收。不可視為正式產品已完成。
+
+最新逐項表見 [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md)，發布清單見 [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md)。
