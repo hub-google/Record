@@ -28,6 +28,7 @@ import com.hubgoogle.record.adb.ShellBootstrap
 import com.hubgoogle.record.call.CallMonitorService
 import com.hubgoogle.record.call.RecoveryScheduler
 import com.hubgoogle.record.core.DeviceProbe
+import com.hubgoogle.record.core.CompatibilityMatrix
 import com.hubgoogle.record.data.Recordings
 import com.hubgoogle.record.media.PlaybackCaptureService
 import com.hubgoogle.record.audio.WavWaveform
@@ -77,6 +78,7 @@ private fun RecordScreen() {
     val bootstrap = remember { ShellBootstrap(context) }
     val daemon = remember { CallDaemonClient(context) }
     val library = remember { Recordings(context) }
+    val matrix = remember { CompatibilityMatrix(context) }
     var consent by remember { mutableStateOf(prefs.getBoolean("consent", false)) }
     var biometricLock by remember { mutableStateOf(prefs.getBoolean("biometricLock", false)) }
     var autoRestore by remember { mutableStateOf(prefs.getBoolean("autoRestore", false)) }
@@ -89,6 +91,10 @@ private fun RecordScreen() {
     var daemonReady by remember { mutableStateOf(false) }
     var manualId by remember { mutableStateOf<String?>(null) }
     var mediaActive by remember { mutableStateOf(false) }
+    var selectedSource by remember { mutableStateOf("CALL_MIX") }
+    var selectedFeature by remember { mutableStateOf("CALL_MIX") }
+    var selectedOutcome by remember { mutableStateOf(matrix.result("CALL_MIX")) }
+    var reportJson by remember { mutableStateOf("") }
     var monitorActive by remember { mutableStateOf(false) }
     var callState by remember { mutableStateOf("") }
     var mediaState by remember { mutableStateOf("") }
@@ -130,6 +136,23 @@ private fun RecordScreen() {
                     })
         } catch (e: Exception) {
             feedback = "裝置驗證功能不可用：" + e.message
+        }
+    }
+
+    val reportExport = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        if (uri != null) {
+            scope.launch {
+                feedback = try {
+                    withContext(Dispatchers.IO) {
+                        context.contentResolver.openOutputStream(uri)?.use {
+                            it.write(reportJson.toByteArray(Charsets.UTF_8))
+                        } ?: error("Cannot create report document")
+                    }
+                    "已匯出不含電話號碼／錄音內容的診斷 JSON"
+                } catch (e: Exception) { "診斷報告匯出失敗：" + e.message }
+            }
         }
     }
 
@@ -337,10 +360,23 @@ private fun RecordScreen() {
                 }, modifier = Modifier.fillMaxWidth()
             ) { Text("停止自動通話監控") }
             HorizontalDivider()
+            Text("手動測試音源（依裝置權限可用，非聲音成功保證）")
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                listOf("CALL_MIX" to "雙方混合", "CALL_TX" to "自己的方向", "CALL_RX" to "對方方向")
+                    .forEach { (source, name) ->
+                        OutlinedButton(enabled = !monitorActive && manualId == null, onClick = {
+                            selectedSource = source
+                            feedback = "已選擇 $name，開始錄製時會嘗試使用此音源"
+                        }, colors = if (selectedSource == source) ButtonDefaults.outlinedButtonColors(
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer
+                        ) else ButtonDefaults.outlinedButtonColors()) { Text(name) }
+                    }
+            }
             Text("手動測試（僅限與知情同意的對象通話）")
             Button(enabled = consent && daemonReady && !monitorActive && manualId == null, onClick = {
                 scope.launch {
                     try {
+                        daemon.selectSource(selectedSource)
                         val answer = daemon.start()
                         feedback = answer
                         if (answer.startsWith("CAPTURING ")) manualId = answer.removePrefix("CAPTURING ").trim()
@@ -563,6 +599,39 @@ private fun RecordScreen() {
                 }
             }
         }
+        }
+        RecordSection("6. 設備相容性與實際驗收紀錄") {
+            Text("以下結果是使用者在實機回放後手動標註，沒有測試的項目預設 NOT_TESTED。")
+            Text("Android 靜態能力診斷不等於數位通話雙方音源驗證。")
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                CompatibilityMatrix.FEATURES.forEach { feature ->
+                    OutlinedButton(onClick = {
+                        selectedFeature = feature
+                        selectedOutcome = matrix.result(feature)
+                    }, colors = if (selectedFeature == feature) ButtonDefaults.outlinedButtonColors(
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer
+                    ) else ButtonDefaults.outlinedButtonColors()) {
+                        Text(feature)
+                    }
+                }
+            }
+            Text("測試項目：" + selectedFeature + "；目前紀錄：" + selectedOutcome.name)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                CompatibilityMatrix.Outcome.entries.forEach { outcome ->
+                    OutlinedButton(onClick = {
+                        selectedOutcome = outcome
+                        matrix.record(selectedFeature, outcome)
+                        feedback = "已儲存 " + selectedFeature + " 的使用者實測標註：" + outcome.name
+                    }, colors = if (selectedOutcome == outcome) ButtonDefaults.outlinedButtonColors(
+                        containerColor = MaterialTheme.colorScheme.tertiaryContainer
+                    ) else ButtonDefaults.outlinedButtonColors()) { Text(outcome.name) }
+                }
+            }
+            OutlinedButton(onClick = {
+                reportJson = matrix.toJson().toString(2)
+                reportExport.launch("record-compatibility.json")
+            }, modifier = Modifier.fillMaxWidth()) { Text("匯出匿名設備相容性診斷 JSON") }
+            Text("不包含電話號碼、錄音檔、配對碼或 ADB token。", style = MaterialTheme.typography.bodySmall)
         }
         Text("相容性仍須以實體 Android 手機驗證。版本 0.1.0-dev，沒有雲端上傳或登入。", style = MaterialTheme.typography.bodySmall)
         Spacer(Modifier.height(24.dp))
