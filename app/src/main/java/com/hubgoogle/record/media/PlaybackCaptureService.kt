@@ -21,6 +21,10 @@ import android.os.Looper
 import android.util.Log
 import com.hubgoogle.record.audio.WavPcmFile
 import com.hubgoogle.record.data.Recordings
+import com.hubgoogle.record.data.RecordingDatabase
+import com.hubgoogle.record.core.QualityAccumulator
+import android.os.SystemClock
+import java.security.MessageDigest
 import java.util.concurrent.atomic.AtomicBoolean
 
 /** User-authorized media/game playback capture; never reads protected voice communications. */
@@ -106,18 +110,34 @@ class PlaybackCaptureService : Service() {
             running.set(true); active = true
             lastStatus = "正在擷取允許錄製的音樂／遊戲聲音"
             val file = Recordings(this).newFile("media")
+            val startNs = SystemClock.elapsedRealtimeNanos()
             worker = Thread({
+                val quality = QualityAccumulator()
+                val digest = MessageDigest.getInstance("SHA-256")
                 try {
                     WavPcmFile(file, sampleRate, channels).use { wav ->
                         val buffer = ByteArray(32768)
                         while (running.get()) {
                             val n = source.read(buffer, 0, buffer.size)
-                            if (n > 0) wav.append(buffer, 0, n)
+                            if (n > 0) {
+                                wav.append(buffer, 0, n)
+                                quality.add(buffer, n)
+                                digest.update(buffer, 0, n)
+                            }
                             else if (n < 0) throw IllegalStateException("AudioRecord error: " + n)
                         }
                     }
-                    lastStatus = if (file.length() > 44) "媒體錄音已儲存：" + file.name else "媒體來源未提供可錄製音訊"
-                    if (file.length() <= 44) file.delete()
+                    val stats = quality.result()
+                    if (file.length() > 44) {
+                        RecordingDatabase(this).save(file, "MEDIA_PLAYBACK", sampleRate, channels,
+                            stats, digest.digest().joinToString("") { "%02x".format(it.toInt() and 0xff) },
+                            startNs)
+                    } else file.delete()
+                    lastStatus = when {
+                        file.length() <= 44 -> "媒體來源未提供可錄製音訊"
+                        stats.isLikelySilent -> "媒體錄音已儲存但可能是靜音：" + file.name
+                        else -> "媒體錄音已儲存：" + file.name
+                    }
                 } catch (e: Exception) {
                     Log.e("RecordCapture", "Media playback capture failed", e)
                     lastStatus = "媒體錄音失敗：" + (e.message ?: e.javaClass.simpleName)

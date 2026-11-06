@@ -3,6 +3,10 @@ package com.hubgoogle.record.adb
 import android.content.Context
 import com.hubgoogle.record.audio.WavPcmFile
 import com.hubgoogle.record.data.Recordings
+import com.hubgoogle.record.data.RecordingDatabase
+import com.hubgoogle.record.core.QualityAccumulator
+import android.os.SystemClock
+import java.security.MessageDigest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.BufferedInputStream
@@ -56,6 +60,10 @@ class CallDaemonClient(private val context: Context) {
     suspend fun fetch(sessionId: String): java.io.File = withContext(Dispatchers.IO) {
         require(Regex("[0-9a-fA-F-]{36}").matches(sessionId))
         val file = Recordings(context).newFile("call")
+        val quality = QualityAccumulator()
+        val digest = MessageDigest.getInstance("SHA-256")
+        var actualRate = 0
+        var actualChannels = 0
         open().use { socket ->
             socket.soTimeout = 30_000
             val input = BufferedInputStream(socket.getInputStream())
@@ -68,6 +76,8 @@ class CallDaemonClient(private val context: Context) {
             val count = info[1].toLong()
             val rate = info[2].toInt()
             val channels = info[3].toInt()
+            actualRate = rate
+            actualChannels = channels
             check(count in 2L..512_000_000L && count % 2 == 0L) { "Empty, invalid or oversized PCM segment" }
             WavPcmFile(file, rate, channels).use { wav ->
                 var remaining = count
@@ -76,12 +86,20 @@ class CallDaemonClient(private val context: Context) {
                     val read = input.read(buffer, 0, minOf(remaining, buffer.size.toLong()).toInt())
                     if (read < 0) throw java.io.EOFException("Segment truncated")
                     wav.append(buffer, 0, read)
+                    quality.add(buffer, read)
+                    digest.update(buffer, 0, read)
                     remaining -= read
                 }
             }
         }
         check(file.exists()) { "WAV file was not committed" }
-        command("DELETE " + sessionId)
+        val stats = quality.result()
+        val startNs = SystemClock.elapsedRealtimeNanos() -
+            (stats.samples * 1_000_000_000L / (actualRate * actualChannels))
+        RecordingDatabase(context).save(file, "CALL_MIX", actualRate, actualChannels,
+            stats, digest.digest().joinToString("") { "%02x".format(it.toInt() and 0xff) },
+            startNs)
+        check(command("DELETE " + sessionId) == "DELETED") { "Shell segment cleanup failed" }
         file
     }
 }

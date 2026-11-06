@@ -272,6 +272,11 @@ private fun RecordScreen() {
                 Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(item.file.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                     Text(item.displayDate + " · " + (item.size / 1024) + " KiB", style = MaterialTheme.typography.bodySmall)
+                    item.details?.let { info ->
+                        Text(info.source + " · " + info.status + " · " + (info.durationMs / 1000) + " 秒 · " +
+                            info.sampleRate + " Hz / " + info.channels + " 聲道",
+                            style = MaterialTheme.typography.bodySmall)
+                    }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedButton(onClick = {
                             try { library.play(item.file); feedback = "播放：" + item.file.name }
