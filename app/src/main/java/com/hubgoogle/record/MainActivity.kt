@@ -35,6 +35,7 @@ import com.hubgoogle.record.audio.WavWaveform
 import androidx.compose.foundation.Canvas
 import androidx.compose.ui.geometry.Offset
 import com.hubgoogle.record.audio.FlacTranscoder
+import com.hubgoogle.record.audio.CompressedTranscoder
 import com.hubgoogle.record.audio.MultiTrackExporter
 import com.hubgoogle.record.security.SecureVault
 import com.hubgoogle.record.data.RecordingDatabase
@@ -536,6 +537,22 @@ private fun RecordScreen() {
                             catch (e: Exception) { feedback = "分享失敗：" + e.message }
                         }) { Text("分享") }
                         if (item.file.extension == "wav") {
+                            for (codec in CompressedTranscoder.Codec.entries) {
+                                OutlinedButton(onClick = {
+                                    scope.launch {
+                                        feedback = "正在編碼 " + codec.extension.uppercase()
+                                        feedback = try {
+                                            val encoded = withContext(Dispatchers.IO) {
+                                                CompressedTranscoder.convert(item.file, codec).also {
+                                                    RecordingDatabase(context).duplicateMetadata(item.file.name, it.name)
+                                                }
+                                            }
+                                            recordings = library.list()
+                                            "已儲存 " + codec.extension + "：" + encoded.name + "（有損備用格式）"
+                                        } catch (e: Exception) { "轉碼失敗：" + e.message }
+                                    }
+                                }) { Text("轉 " + codec.extension.uppercase()) }
+                            }
                             OutlinedButton(onClick = {
                                 scope.launch {
                                     feedback = "正在將 PCM WAV 無損轉為 FLAC"

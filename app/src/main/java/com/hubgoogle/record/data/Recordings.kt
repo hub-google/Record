@@ -18,7 +18,7 @@ class Recordings(private val context: Context) {
         val cleaned = prefix.replace(Regex("[^A-Za-z0-9_-]"), "").take(25).ifEmpty { "recording" }
         return File(dir, cleaned + "_" + System.currentTimeMillis() + "_" + java.util.UUID.randomUUID().toString().take(8) + ".wav")
     }
-    fun list(): List<RecordingFile> = dir.listFiles()?.filter { it.isFile && it.extension in setOf("wav", "flac", "zip", "enc") }
+    fun list(): List<RecordingFile> = dir.listFiles()?.filter { it.isFile && it.extension in setOf("wav", "flac", "m4a", "ogg", "zip", "enc") }
         ?.sortedByDescending { it.lastModified() }?.map { RecordingFile(it, it.lastModified(), it.length(), database.details(it.name)) }.orEmpty()
     /**
      * User opt-in retention; 0 = never delete. Files are removed only inside our
@@ -48,6 +48,8 @@ class Recordings(private val context: Context) {
             file.name.endsWith(".wav.enc") -> ".wav.enc"
             file.name.endsWith(".flac.enc") -> ".flac.enc"
             file.name.endsWith(".zip.enc") -> ".zip.enc"
+            file.name.endsWith(".m4a.enc") -> ".m4a.enc"
+            file.name.endsWith(".ogg.enc") -> ".ogg.enc"
             else -> "." + file.extension
         }
         val output = File(dir, safe + suffix)
@@ -80,6 +82,8 @@ class Recordings(private val context: Context) {
             Intent(Intent.ACTION_SEND).apply {
                 type = when (file.extension.lowercase()) {
                     "flac" -> "audio/flac"
+                    "m4a" -> "audio/mp4"
+                    "ogg" -> "audio/ogg"
                     "zip" -> "application/zip"
                     else -> "audio/wav"
                 }
