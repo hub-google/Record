@@ -18,7 +18,7 @@ class Recordings(private val context: Context) {
         val cleaned = prefix.replace(Regex("[^A-Za-z0-9_-]"), "").take(25).ifEmpty { "recording" }
         return File(dir, cleaned + "_" + System.currentTimeMillis() + "_" + java.util.UUID.randomUUID().toString().take(8) + ".wav")
     }
-    fun list(): List<RecordingFile> = dir.listFiles()?.filter { it.isFile && it.extension in setOf("wav", "flac", "zip") }
+    fun list(): List<RecordingFile> = dir.listFiles()?.filter { it.isFile && it.extension in setOf("wav", "flac", "zip", "enc") }
         ?.sortedByDescending { it.lastModified() }?.map { RecordingFile(it, it.lastModified(), it.length(), database.details(it.name)) }.orEmpty()
     /**
      * User opt-in retention; 0 = never delete. Files are removed only inside our
@@ -43,7 +43,7 @@ class Recordings(private val context: Context) {
     }
     private fun isOwned(file: File) = file.canonicalFile.parentFile == dir.canonicalFile
     fun share(file: File) {
-        check(isOwned(file))
+        check(isOwned(file) && !file.name.endsWith(".enc")) { "Encrypted recordings must be decrypted first" }
         val uri = FileProvider.getUriForFile(context, context.packageName + ".files", file)
         context.startActivity(Intent.createChooser(
             Intent(Intent.ACTION_SEND).apply {

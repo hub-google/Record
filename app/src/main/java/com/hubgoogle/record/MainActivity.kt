@@ -28,6 +28,7 @@ import com.hubgoogle.record.data.Recordings
 import com.hubgoogle.record.media.PlaybackCaptureService
 import com.hubgoogle.record.audio.FlacTranscoder
 import com.hubgoogle.record.audio.MultiTrackExporter
+import com.hubgoogle.record.security.SecureVault
 import com.hubgoogle.record.data.RecordingDatabase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -324,6 +325,32 @@ private fun RecordScreen() {
                             style = MaterialTheme.typography.bodySmall)
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (item.file.extension == "enc") {
+                            OutlinedButton(onClick = {
+                                scope.launch {
+                                    feedback = try {
+                                        val restored = withContext(Dispatchers.IO) { SecureVault.decrypt(item.file) }
+                                        RecordingDatabase(context).duplicateMetadata(item.file.name, restored.name)
+                                        library.remove(item.file)
+                                        recordings = library.list()
+                                        "錄音已解密，已還原：" + restored.name
+                                    } catch (e: Exception) { "解密失敗：" + e.message }
+                                }
+                            }) { Text("解密") }
+                        }
+                        if (item.file.extension != "enc" && item.file.extension != "zip") {
+                            OutlinedButton(onClick = {
+                                scope.launch {
+                                    feedback = try {
+                                        val encrypted = withContext(Dispatchers.IO) { SecureVault.encrypt(item.file) }
+                                        RecordingDatabase(context).duplicateMetadata(item.file.name, encrypted.name)
+                                        library.remove(item.file)
+                                        recordings = library.list()
+                                        "已加密並移除明文錄音：" + encrypted.name
+                                    } catch (e: Exception) { "加密失敗：" + e.message }
+                                }
+                            }) { Text("加密") }
+                        }
                         if (item.file.extension != "zip" && item.details?.source == "CALL_MIX") {
                             val pair = MultiTrackExporter.findBestPair(item, recordings)
                             if (pair != null) {
@@ -340,11 +367,11 @@ private fun RecordScreen() {
                                 }) { Text("匯出同期雙音軌") }
                             }
                         }
-                        if (item.file.extension != "zip") OutlinedButton(onClick = {
+                        if (item.file.extension != "zip" && item.file.extension != "enc") OutlinedButton(onClick = {
                             try { library.play(item.file); feedback = "播放：" + item.file.name }
                             catch (e: Exception) { feedback = "播放失敗：" + e.message }
                         }) { Text("播放") }
-                        OutlinedButton(onClick = {
+                        if (item.file.extension != "enc") OutlinedButton(onClick = {
                             try { library.share(item.file) }
                             catch (e: Exception) { feedback = "分享失敗：" + e.message }
                         }) { Text("分享") }
