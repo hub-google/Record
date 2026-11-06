@@ -22,18 +22,21 @@ import java.util.UUID;
 public final class ShellCaptureMain {
     private static final int RATE = 16000;
     private static final int CHANNELS = 1;
+    // Under nine minutes at 16 kHz PCM16 mono: a failure loses at most
+    // the active segment, and completed segments remain recoverable.
+    private static final long SEGMENT_LIMIT_BYTES = 16L * 1024 * 1024;
     private static final File ROOT = new File("/data/local/tmp/record-sessions");
     private final String token;
     private AudioRecord input;
     private Thread captureThread;
     private volatile boolean capturing;
-    private String sessionId;
+    private volatile String sessionId;
     private long captureStartedNs = 0L;
     private volatile int meterLevel = 0;
     private int selectedSource = MediaRecorder.AudioSource.VOICE_CALL;
     private String selectedName = "CALL_MIX";
     private File currentFile;
-    private String lastError = "";
+    private volatile String lastError = "";
     private final Object lock = new Object();
 
     private ShellCaptureMain(String token) { this.token = token; }
@@ -228,13 +231,40 @@ public final class ShellCaptureMain {
             }
         }
     }
+    /**
+     * Finalizes each PCM segment by closing the output stream before opening
+     * another. The caller fetches all PENDING segment UUIDs after STOP.
+     */
     private void capture(AudioRecord recorder, File output) {
         byte[] bytes = new byte[8192];
-        try (OutputStream file = new BufferedOutputStream(new FileOutputStream(output))) {
+        BufferedOutputStream stream = null;
+        long segmentBytes = 0L;
+        try {
+            stream = new BufferedOutputStream(new FileOutputStream(output));
             while (capturing) {
                 int n = recorder.read(bytes, 0, bytes.length);
                 if (n > 0) {
-                    file.write(bytes, 0, n);
+                    if (segmentBytes + n > SEGMENT_LIMIT_BYTES) {
+                        stream.flush();
+                        stream.close();
+                        stream = null;
+                        String nextId = UUID.randomUUID().toString();
+                        long nextStartedNs = SystemClock.elapsedRealtimeNanos();
+                        try (FileWriter metadata = new FileWriter(sessionMetadata(nextId))) {
+                            metadata.write(Long.toString(nextStartedNs) + "\\n");
+                            metadata.write(Integer.toString(
+                                selectedName.equals("CALL_TX") ? 1 :
+                                selectedName.equals("CALL_RX") ? 2 : 0) + "\\n");
+                        }
+                        File nextFile = new File(ROOT, nextId + ".pcm");
+                        stream = new BufferedOutputStream(new FileOutputStream(nextFile));
+                        captureStartedNs = nextStartedNs;
+                        currentFile = nextFile;
+                        sessionId = nextId;
+                        segmentBytes = 0L;
+                    }
+                    stream.write(bytes, 0, n);
+                    segmentBytes += n;
                     double power = 0;
                     for (int i = 0; i + 1 < n; i += 2) {
                         int sample = (short)(((bytes[i + 1] & 255) << 8) | (bytes[i] & 255));
@@ -243,11 +273,20 @@ public final class ShellCaptureMain {
                     double rms = Math.sqrt(power / Math.max(1, n / 2));
                     meterLevel = rms < 1 ? 0 : Math.max(0, Math.min(100,
                         (int)((20 * Math.log10(rms / 32768.0) + 60) / 0.6)));
+                } else if (n < 0) {
+                    if (capturing) lastError = "AudioRecord read " + n;
+                    break;
                 }
-                else if (n < 0) { lastError = "AudioRecord read " + n; break; }
             }
-        } catch (IOException e) { lastError = e.toString(); }
-        finally { capturing = false; }
+        } catch (IOException e) {
+            lastError = e.toString();
+        } finally {
+            if (stream != null) try { stream.close(); } catch (IOException e) {
+                lastError = "Failed finalizing audio segment: " + e.getMessage();
+            }
+            capturing = false;
+            meterLevel = 0;
+        }
     }
     private String stopCapture() {
         synchronized (lock) {

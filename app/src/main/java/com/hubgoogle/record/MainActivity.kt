@@ -411,8 +411,12 @@ private fun RecordScreen() {
                         val stopped = daemon.stop()
                         feedback = stopped
                         if (stopped.startsWith("STOPPED ")) {
-                            val file = daemon.fetch(id)
-                            feedback = "已保存：" + file.name
+                            var saved = 0
+                            for (pendingId in daemon.pending()) {
+                                daemon.fetch(pendingId)
+                                saved++
+                            }
+                            feedback = "已保存 " + saved + " 個 WAV 片段"
                             manualId = null
                             recordings = library.list()
                         }

@@ -106,13 +106,18 @@ class CallMonitorService : Service() {
         }
     }
     private suspend fun end() {
-        val id = session ?: return
+        if (session == null) return
         session = null
         try {
             val answer = client.stop()
             if (!answer.startsWith("STOPPED ")) { lastStatus = "通話錄音不完整：" + answer; return }
-            client.fetch(id)
-            lastStatus = "通話錄音已寫入本機 WAV"
+            var count = 0
+            for (id in client.pending()) {
+                client.fetch(id)
+                count++
+            }
+            lastStatus = if (count > 0) "通話錄音已儲存 " + count + " 個完整音訊片段" else
+                "沒有可保存的通話音訊片段"
         } catch (e: Exception) {
             lastStatus = "通話錄音傳輸失敗：" + e.message
         }
