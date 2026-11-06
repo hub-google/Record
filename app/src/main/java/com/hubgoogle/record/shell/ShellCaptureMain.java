@@ -91,6 +91,17 @@ public final class ShellCaptureMain {
             if (!id.matches("[0-9a-fA-F-]{36}") || capturing) { write(out, "ERR invalid state"); return; }
             File f = new File(ROOT, id + ".pcm");
             write(out, f.delete() || !f.exists() ? "DELETED" : "ERR cannot delete");
+        } else if (cmd.equals("PENDING")) {
+            StringBuilder pending = new StringBuilder("PENDING");
+            File[] files = ROOT.listFiles((dir, name) -> name.matches("[0-9a-fA-F-]{36}\\.pcm"));
+            if (files != null) {
+                for (File f : files) {
+                    String id = f.getName().substring(0, f.getName().length() - 4);
+                    if (id.equals(sessionId) && capturing) continue;
+                    if (f.length() > 0 && pending.length() < 800) pending.append(' ').append(id);
+                }
+            }
+            write(out, pending.toString());
         } else if (cmd.equals("SHUTDOWN")) {
             stopCapture();
             quit = true; write(out, "BYE");

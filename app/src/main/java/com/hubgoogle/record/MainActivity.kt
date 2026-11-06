@@ -187,6 +187,22 @@ private fun RecordScreen() {
             }, modifier = Modifier.fillMaxWidth()) { Text("啟動通話錄音核心（shell daemon）") }
             if (daemonReady) {
                 OutlinedButton(onClick = {
+                    scope.launch {
+                        try {
+                            val pending = daemon.pending()
+                            var recovered = 0
+                            for (id in pending) {
+                                daemon.fetch(id)
+                                recovered++
+                            }
+                            recordings = library.list()
+                            feedback = "已恢復 " + recovered + " 筆尚未收取的通話音檔"
+                        } catch (e: Exception) {
+                            feedback = "恢復尚未收取音檔失敗：" + e.message
+                        }
+                    }
+                }, modifier = Modifier.fillMaxWidth()) { Text("檢查／收取尚未儲存的錄音片段") }
+                OutlinedButton(onClick = {
                     scope.launch { feedback = daemon.shutdown(); daemonReady = daemon.ping() }
                 }, modifier = Modifier.fillMaxWidth()) { Text("停止通話錄音核心") }
             }

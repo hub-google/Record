@@ -51,7 +51,15 @@ class CallDaemonClient(private val context: Context) {
         readLine(input)
     }
     suspend fun ping(): Boolean = withContext(Dispatchers.IO) { runCatching { command("STATUS").startsWith("STATE ") }.getOrDefault(false) }
+
     suspend fun status(): String = withContext(Dispatchers.IO) { command("STATUS") }
+    suspend fun pending(): List<String> = withContext(Dispatchers.IO) {
+        val answer = command("PENDING")
+        check(answer.startsWith("PENDING")) { answer }
+        answer.removePrefix("PENDING").trim().split(' ').filter {
+            Regex("[0-9a-fA-F-]{36}").matches(it)
+        }
+    }
     suspend fun start(): String = withContext(Dispatchers.IO) { command("START") }
     suspend fun stop(): String = withContext(Dispatchers.IO) { command("STOP") }
     suspend fun shutdown(): String = withContext(Dispatchers.IO) { command("SHUTDOWN") }

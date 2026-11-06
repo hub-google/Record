@@ -6,3 +6,12 @@ Other projects referenced in TECHNICAL.md are architectural references only; no 
 
 JemRec upstream sources were fetched and adapted on 2026-11-06. All other implementation modules are independent drafts requiring review and device testing. This repository has not passed a verified Android build or device test.
 
+
+## Apache-2.0 source license text
+
+The complete Apache-2.0 license for adapted JemRec ADB sources and Apache-2.0 referenced components is included in [LICENSE-APACHE-2.0](LICENSE-APACHE-2.0).
+The two adapted ADB files retain original author's copyright under JemRec upstream. Original code used under Apache-2.0; modifications include changing the package identifier and app name. Do not remove the original attribution when redistributing.
+
+## libadb-android
+
+Used as a Gradle dependency from MuntashirAkon/libadb-android, offered under Apache-2.0 or GPL-3.0-or-later; this project elects Apache-2.0: https://github.com/MuntashirAkon/libadb-android .
