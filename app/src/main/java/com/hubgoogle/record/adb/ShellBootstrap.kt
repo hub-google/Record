@@ -28,15 +28,15 @@ class ShellBootstrap(private val context: Context) {
             check(apk.matches(Regex("[A-Za-z0-9_./+=-]+"))) { "Unexpected APK path" }
             val token = CallDaemonClient(context).token()
             val command = "CLASSPATH=" + apk +
-                " nohup app_process /system/bin com.hubgoogle.record.shell.ShellCaptureMain " +
+                " setsid nohup app_process /system/bin com.hubgoogle.record.shell.ShellCaptureMain " +
                 CallDaemonClient.PORT + " " + token +
                 " </dev/null >/data/local/tmp/record_shell.log 2>&1 &"
             val output = AdbTransport.exec(command).getOrThrow()
             // ADB can report launch success before the process has bound its socket.
             var connected = false
-            repeat(15) {
+            for (attempt in 0 until 15) {
                 kotlinx.coroutines.delay(250)
-                if (CallDaemonClient(context).ping()) { connected = true; return@repeat }
+                if (CallDaemonClient(context).ping()) { connected = true; break }
             }
             check(connected) { "Shell daemon did not start. Check /data/local/tmp/record_shell.log via ADB." }
             output.ifBlank { "Recorder daemon running" }

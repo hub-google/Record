@@ -118,12 +118,12 @@ class CallMonitorService : Service() {
     }
     override fun onDestroy() {
         callback?.let { cb -> runCatching { getSystemService(TelephonyManager::class.java).unregisterTelephonyCallback(cb) } }
-        scope.launch { mutex.withLock { end() } }
-        // Wait for active call to finish before shutting down the coroutine scope.
-        // An interrupted transmission remains on shell daemon for manual recovery.
+        // Finish the current session before cancelling scope; cancelling immediately here
+        // would abort the stop/fetch coroutine and lose the file.
+        val finalization = scope.launch { mutex.withLock { end() } }
+        finalization.invokeOnCompletion { scope.cancel() }
         running = false
-        lastStatus = if (session == null) "通話監控已停止" else "監控停止，請檢查未完成錄音"
-        scope.cancel()
+        lastStatus = if (session == null) "通話監控已停止" else "監控停止，正在保存最後一通錄音"
         super.onDestroy()
     }
 }

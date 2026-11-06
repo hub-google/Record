@@ -68,7 +68,7 @@ class CallDaemonClient(private val context: Context) {
             val count = info[1].toLong()
             val rate = info[2].toInt()
             val channels = info[3].toInt()
-            check(count in 0L..512_000_000L) { "Unexpected segment size" }
+            check(count in 2L..512_000_000L && count % 2 == 0L) { "Empty, invalid or oversized PCM segment" }
             WavPcmFile(file, rate, channels).use { wav ->
                 var remaining = count
                 val buffer = ByteArray(32768)

@@ -16,7 +16,7 @@
 
 ## 執行前提
 
-Android 12+，Android Studio/Gradle 9.4 和 Android SDK 36。將專案以 Android Studio 開啟，允許 Gradle 同步，在手機上由自己安裝並測試。
+Android 12+，Android Studio/Gradle Wrapper 9.7.1 和 Android SDK 36。將專案以 Android Studio 開啟，允許 Gradle 同步，在手機上由自己安裝並測試。
 
 初次使用需授權 RE​​CORD_AUDIO／READ_PHONE_STATE，在開發人員選項打開無線偵錯，手機對自己完成一次性六碼配對，再輸入無線偵錯連接埠，啟動 shell daemon。這些設定和手機相容性取決於 OEM；**一般無 Root APK 無法直接取得受保護的 VOICE_CALL 音源**。
 
