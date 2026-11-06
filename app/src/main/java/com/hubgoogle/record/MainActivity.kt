@@ -84,6 +84,7 @@ private fun RecordScreen() {
     val library = remember { Recordings(context) }
     val matrix = remember { CompatibilityMatrix(context) }
     var consent by remember { mutableStateOf(prefs.getBoolean("consent", false)) }
+    var clearConfirmation by remember { mutableStateOf(false) }
     var biometricLock by remember { mutableStateOf(prefs.getBoolean("biometricLock", false)) }
     var autoRestore by remember { mutableStateOf(prefs.getBoolean("autoRestore", false)) }
     var voipEnabled by remember { mutableStateOf(prefs.getBoolean("voipEnabled", false)) }
@@ -248,7 +249,9 @@ private fun RecordScreen() {
             Row {
                 Checkbox(checked = consent, onCheckedChange = {
                     consent = it
-                    prefs.edit().putBoolean("consent", it).apply()
+                    prefs.edit().putBoolean("consent", it)
+                        .putLong("consentAtEpochMs", if (it) System.currentTimeMillis() else 0L)
+                        .apply()
                 })
                 Text(
                     "我了解錄音須符合適用法律，必要時應先取得通話對方同意。" +
@@ -274,6 +277,11 @@ private fun RecordScreen() {
             }, modifier = Modifier.fillMaxWidth()) {
                 Text(if (biometricLock) "關閉錄音庫生物辨識／裝置密碼鎖" else "啟用錄音庫生物辨識／裝置密碼鎖")
             }
+            val consentTimestamp = prefs.getLong("consentAtEpochMs", 0L)
+            Text("本機告知確認時間：" +
+                (if (consentTimestamp == 0L) "未確認" else
+                    java.text.DateFormat.getDateTimeInstance().format(java.util.Date(consentTimestamp))),
+                style = MaterialTheme.typography.bodySmall)
             Text(DeviceProbe.inspect(context).report(), style = MaterialTheme.typography.bodySmall)
             OutlinedButton(
                 onClick = { feedback = DeviceProbe.inspect(context).report() },
