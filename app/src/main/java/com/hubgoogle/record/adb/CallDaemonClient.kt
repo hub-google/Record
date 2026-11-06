@@ -98,6 +98,7 @@ class CallDaemonClient(private val context: Context) {
                     digest.update(buffer, 0, read)
                     remaining -= read
                 }
+                wav.commit()
             }
         }
         check(file.exists()) { "WAV file was not committed" }

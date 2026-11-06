@@ -12,7 +12,7 @@ class WavPcmFileTest {
         val dir = Files.createTempDirectory("record-wav").toFile()
         val target = File(dir, "capture.wav")
         val data = byteArrayOf(0, 0, 0xff.toByte(), 0x7f, 1, 0)
-        WavPcmFile(target, 16000, 1).use { it.append(data) }
+        WavPcmFile(target, 16000, 1).use { it.append(data); it.commit() }
         val file = target.readBytes()
         assertEquals("RIFF", file.copyOfRange(0, 4).toString(Charsets.US_ASCII))
         assertEquals("WAVE", file.copyOfRange(8, 12).toString(Charsets.US_ASCII))
@@ -23,6 +23,15 @@ class WavPcmFileTest {
         assertEquals(data.size, header.getInt(40))
         assertArrayEquals(data, file.copyOfRange(44, file.size))
         assertFalse(File(dir, "capture.wav.partial").exists())
+        dir.deleteRecursively()
+    }
+
+    @Test fun failedPartialFileNeverBecomesPublishedWav() {
+        val dir = Files.createTempDirectory("record-incomplete").toFile()
+        val target = File(dir, "bad.wav")
+        WavPcmFile(target, 16000, 1).use { it.append(byteArrayOf(1, 2, 3, 4)) }
+        assertFalse(target.exists())
+        assertFalse(File(dir, "bad.wav.partial").exists())
         dir.deleteRecursively()
     }
     @Test(expected = IllegalArgumentException::class)

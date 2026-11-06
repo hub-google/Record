@@ -126,6 +126,7 @@ class PlaybackCaptureService : Service() {
                             }
                             else if (n < 0) throw IllegalStateException("AudioRecord error: " + n)
                         }
+                        wav.commit()
                     }
                     val stats = quality.result()
                     if (file.length() > 44) {
