@@ -78,6 +78,7 @@ class Recordings(private val context: Context) {
     fun deleteAll(): Int {
         var deleted = 0
         for (entry in list()) if (remove(entry.file)) deleted++
+        if (list().isEmpty()) database.clearIndex()
         return deleted
     }
 

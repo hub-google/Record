@@ -118,6 +118,7 @@ class RecordingDatabase(context: Context) : SQLiteOpenHelper(context, "record_in
         val values = ContentValues().apply { put("filename", newName) }
         writableDatabase.update("recordings", values, "filename=?", arrayOf(oldName))
     }
+    fun clearIndex() { writableDatabase.delete("recordings", null, null) }
     fun delete(filename: String): Boolean =
         writableDatabase.delete("recordings", "filename=?", arrayOf(filename)) >= 0
 }

@@ -69,6 +69,14 @@ class CallDaemonClient(private val context: Context) {
     suspend fun start(): String = withContext(Dispatchers.IO) { command("START") }
     suspend fun stop(): String = withContext(Dispatchers.IO) { command("STOP") }
     suspend fun shutdown(): String = withContext(Dispatchers.IO) { command("SHUTDOWN") }
+    suspend fun removeAllPending(): Int = withContext(Dispatchers.IO) {
+        var deleted = 0
+        for (id in pending()) {
+            if (command("DELETE " + id) == "DELETED") deleted++
+            else error("Cannot remove shell recording segment " + id)
+        }
+        deleted
+    }
 
     /** Copies exactly the daemon's raw 16-bit PCM output, then atomically finalizes a WAV. */
     suspend fun fetch(sessionId: String): java.io.File = withContext(Dispatchers.IO) {

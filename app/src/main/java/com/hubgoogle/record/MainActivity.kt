@@ -743,10 +743,28 @@ private fun RecordScreen() {
                     text = { Text("將永久刪除本機 WAV、FLAC、M4A、OGG、加密檔與 ZIP 封存。此操作無法復原。") },
                     confirmButton = {
                         Button(onClick = {
-                            val count = library.deleteAll()
-                            recordings = library.list()
                             clearConfirmation = false
-                            feedback = "已永久刪除 " + count + " 個本機音檔"
+                            scope.launch {
+                                RecoveryScheduler.setEnabled(context, false)
+                                autoRestore = false
+                                prefs.edit().putBoolean("voipEnabled", false).apply()
+                                voipEnabled = false
+                                feedback = "正在刪除本機及可存取的 shell 錄音片段"
+                                val shellResult = withContext(Dispatchers.IO) {
+                                    if (daemon.ping()) runCatching {
+                                        val removed = daemon.removeAllPending()
+                                        daemon.shutdown()
+                                        removed
+                                    } else Result.failure(
+                                        IllegalStateException("shell 錄音核心無法連線，無法確認其暫存已清除"))
+                                }
+                                val count = withContext(Dispatchers.IO) { library.deleteAll() }
+                                recordings = library.list()
+                                feedback = shellResult.fold(
+                                    { removed -> "已刪除本機 " + count + " 個檔案，及 shell " + removed + " 個片段" },
+                                    { err -> "已刪除本機 " + count + " 個檔案，但 shell 片段尚未確認清除：" + err.message }
+                                )
+                            }
                         }) { Text("永久刪除") }
                     },
                     dismissButton = {
