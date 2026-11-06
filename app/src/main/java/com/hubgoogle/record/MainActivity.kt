@@ -64,6 +64,8 @@ private fun RecordScreen() {
     val daemon = remember { CallDaemonClient(context) }
     val library = remember { Recordings(context) }
     var consent by remember { mutableStateOf(prefs.getBoolean("consent", false)) }
+    var retentionDays by remember { mutableIntStateOf(prefs.getInt("retentionDays", 0)) }
+    var restartNotice by remember { mutableStateOf(prefs.getBoolean("needs_recovery", false)) }
     var pairPort by remember { mutableStateOf("") }
     var connectPort by remember { mutableStateOf("") }
     var pairingCode by remember { mutableStateOf("") }
@@ -98,8 +100,13 @@ private fun RecordScreen() {
     }
 
     LaunchedEffect(Unit) {
+        if (retentionDays > 0) library.purgeOlderThan(retentionDays)
         while (true) {
             daemonReady = daemon.ping()
+            if (daemonReady && restartNotice) {
+                prefs.edit().putBoolean("needs_recovery", false).apply()
+                restartNotice = false
+            }
             mediaActive = PlaybackCaptureService.active
             monitorActive = CallMonitorService.running
             callState = CallMonitorService.lastStatus
@@ -117,6 +124,7 @@ private fun RecordScreen() {
         Text("Android 非 Root 通話／內部聲音錄製", style = MaterialTheme.typography.bodyLarge)
         Text("程式碼開發版 • 系統與機型相容性仍需實機測試", color = MaterialTheme.colorScheme.error)
         RecordSection("狀態與操作結果") {
+            if (restartNotice) Text("偵測到手機重新啟動：通話錄音核心尚待驗證恢復", color = MaterialTheme.colorScheme.error)
             Text("通話音訊服務：" + if (daemonReady) "就緒" else "尚未就緒")
             Text("通話監控：" + if (monitorActive) "已開啟" else "未啟用")
             Text("媒體錄音：" + if (mediaActive) "進行中" else "未錄製")
@@ -285,8 +293,25 @@ private fun RecordScreen() {
                 style = MaterialTheme.typography.bodySmall)
         }
 
-        RecordSection("5. 本機錄音檔（WAV）") {
+        RecordSection("5. 本機錄音檔（WAV / FLAC / ZIP）") {
             Text("錄音檔只在手機私有空間；分享必須由你手動操作。")
+            Text("自動清理規則（預設保留全部）")
+            Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                listOf(0 to "永久", 7 to "7天", 30 to "30天", 90 to "90天").forEach { (days, label) ->
+                    OutlinedButton(onClick = {
+                        retentionDays = days
+                        prefs.edit().putInt("retentionDays", days).apply()
+                        feedback = if (days == 0) "已關閉自動清理" else "保留最近 " + days + " 天的錄音"
+                    }, colors = if (retentionDays == days) ButtonDefaults.outlinedButtonColors(
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer
+                    ) else ButtonDefaults.outlinedButtonColors()) { Text(label) }
+                }
+            }
+            OutlinedButton(onClick = {
+                val count = library.purgeOlderThan(retentionDays)
+                recordings = library.list()
+                feedback = if (retentionDays == 0) "未啟用自動清理" else "已清除 " + count + " 個過期檔案"
+            }, modifier = Modifier.fillMaxWidth()) { Text("立即執行保留期限清理") }
             Button(onClick = { recordings = library.list() }, modifier = Modifier.fillMaxWidth()) { Text("重新整理錄音列表") }
             if (recordings.isEmpty()) Text("目前沒有錄音")
             recordings.forEach { item ->

@@ -20,6 +20,22 @@ class Recordings(private val context: Context) {
     }
     fun list(): List<RecordingFile> = dir.listFiles()?.filter { it.isFile && it.extension in setOf("wav", "flac", "zip") }
         ?.sortedByDescending { it.lastModified() }?.map { RecordingFile(it, it.lastModified(), it.length(), database.details(it.name)) }.orEmpty()
+    /**
+     * User opt-in retention; 0 = never delete. Files are removed only inside our
+     * private recordings folder, and metadata rows are removed after file deletion.
+     */
+    fun purgeOlderThan(days: Int): Int {
+        require(days == 0 || days in 1..3650)
+        if (days == 0) return 0
+        val cutoff = System.currentTimeMillis() - days.toLong() * 86_400_000L
+        var deleted = 0
+        for (file in dir.listFiles().orEmpty()) {
+            if (file.isFile && file.extension in setOf("wav", "flac", "zip")
+                && file.lastModified() < cutoff && remove(file)) deleted++
+        }
+        return deleted
+    }
+
     fun remove(file: File): Boolean {
         if (!isOwned(file) || !file.delete()) return false
         database.delete(file.name)
