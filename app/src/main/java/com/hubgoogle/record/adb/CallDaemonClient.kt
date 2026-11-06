@@ -53,6 +53,12 @@ class CallDaemonClient(private val context: Context) {
     suspend fun ping(): Boolean = withContext(Dispatchers.IO) { runCatching { command("STATUS").startsWith("STATE ") }.getOrDefault(false) }
 
     suspend fun status(): String = withContext(Dispatchers.IO) { command("STATUS") }
+    suspend fun selectSource(name: String): String = withContext(Dispatchers.IO) {
+        require(name in setOf("CALL_MIX", "CALL_TX", "CALL_RX"))
+        val answer = command("SELECT " + name)
+        check(answer == "SELECTED " + name) { answer }
+        answer
+    }
     suspend fun pending(): List<String> = withContext(Dispatchers.IO) {
         val answer = command("PENDING")
         check(answer.startsWith("PENDING")) { answer }
@@ -72,6 +78,8 @@ class CallDaemonClient(private val context: Context) {
         val digest = MessageDigest.getInstance("SHA-256")
         var actualRate = 0
         var actualChannels = 0
+        var sourceName = "CALL_MIX"
+        var sourceStartNs = 0L
         open().use { socket ->
             socket.soTimeout = 30_000
             val input = BufferedInputStream(socket.getInputStream())
@@ -80,12 +88,15 @@ class CallDaemonClient(private val context: Context) {
             output.flush()
             check(readLine(input) == "OK") { "Authentication failed" }
             val info = readLine(input).split(" ")
-            check(info.size == 4 && info[0] == "FILE") { info.joinToString(" ") }
+            check(info.size == 6 && info[0] == "FILE") { "Unsupported daemon protocol: " + info.joinToString(" ") }
             val count = info[1].toLong()
             val rate = info[2].toInt()
             val channels = info[3].toInt()
             actualRate = rate
             actualChannels = channels
+            sourceStartNs = info[4].toLong()
+            sourceName = info[5]
+            check(sourceName in setOf("CALL_MIX", "CALL_TX", "CALL_RX")) { "Unknown audio source" }
             check(count in 2L..512_000_000L && count % 2 == 0L) { "Empty, invalid or oversized PCM segment" }
             WavPcmFile(file, rate, channels).use { wav ->
                 var remaining = count
@@ -103,9 +114,10 @@ class CallDaemonClient(private val context: Context) {
         }
         check(file.exists()) { "WAV file was not committed" }
         val stats = quality.result()
-        val startNs = SystemClock.elapsedRealtimeNanos() -
-            (stats.samples * 1_000_000_000L / (actualRate * actualChannels))
-        RecordingDatabase(context).save(file, "CALL_MIX", actualRate, actualChannels,
+        // Use daemon clock sampled when AudioRecord started, not the time of
+        // post-call file transfer. This makes media/call overlap calculations valid.
+        val startNs = if (sourceStartNs > 0L) sourceStartNs else 0L
+        RecordingDatabase(context).save(file, sourceName, actualRate, actualChannels,
             stats, digest.digest().joinToString("") { "%02x".format(it.toInt() and 0xff) },
             startNs)
         check(command("DELETE " + sessionId) == "DELETED") { "Shell segment cleanup failed" }

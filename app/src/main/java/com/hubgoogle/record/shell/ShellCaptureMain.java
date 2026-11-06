@@ -2,6 +2,7 @@ package com.hubgoogle.record.shell;
 
 import android.media.AudioFormat;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.os.Process;
 import android.system.Os;
 import java.lang.reflect.Field;
@@ -27,6 +28,9 @@ public final class ShellCaptureMain {
     private Thread captureThread;
     private volatile boolean capturing;
     private String sessionId;
+    private long captureStartedNs = 0L;
+    private int selectedSource = MediaRecorder.AudioSource.VOICE_CALL;
+    private String selectedName = "CALL_MIX";
     private File currentFile;
     private String lastError = "";
     private final Object lock = new Object();
@@ -91,8 +95,20 @@ public final class ShellCaptureMain {
         if (!constantTimeEquals(auth, "AUTH " + token)) { write(out, "ERR unauthorized"); return; }
         write(out, "OK");
         String cmd = line(in);
-        if (cmd.equals("STATUS")) {
-            write(out, "STATE " + (capturing ? "CAPTURING" : "READY") + " " + (sessionId == null ? "-" : sessionId));
+        if (cmd.startsWith("SELECT ")) {
+            if (capturing) { write(out, "ERR recording active"); return; }
+            String source = cmd.substring(7);
+            switch (source) {
+                case "CALL_MIX": selectedSource = MediaRecorder.AudioSource.VOICE_CALL; break;
+                case "CALL_TX": selectedSource = MediaRecorder.AudioSource.VOICE_UPLINK; break;
+                case "CALL_RX": selectedSource = MediaRecorder.AudioSource.VOICE_DOWNLINK; break;
+                default: write(out, "ERR unknown audio source"); return;
+            }
+            selectedName = source;
+            write(out, "SELECTED " + selectedName);
+        } else if (cmd.equals("STATUS")) {
+            write(out, "STATE " + (capturing ? "CAPTURING" : "READY") + " " +
+                (sessionId == null ? "-" : sessionId) + " " + selectedName);
         } else if (cmd.equals("START")) {
             write(out, startCapture());
         } else if (cmd.equals("STOP")) {
@@ -104,7 +120,8 @@ public final class ShellCaptureMain {
             if (capturing || !f.isFile() || !f.getCanonicalFile().getParentFile().equals(ROOT.getCanonicalFile())) {
                 write(out, "ERR file unavailable"); return;
             }
-            write(out, "FILE " + f.length() + " " + RATE + " " + CHANNELS);
+            write(out, "FILE " + f.length() + " " + RATE + " " + CHANNELS + " " +
+                (id.equals(sessionId) ? captureStartedNs : 0) + " " + selectedName);
             try (InputStream stream = new BufferedInputStream(new FileInputStream(f))) {
                 byte[] bytes = new byte[32768]; int n;
                 while ((n = stream.read(bytes)) != -1) out.write(bytes, 0, n);
@@ -143,12 +160,13 @@ public final class ShellCaptureMain {
             try {
                 AudioFormat format = new AudioFormat.Builder().setEncoding(AudioFormat.ENCODING_PCM_16BIT)
                     .setSampleRate(RATE).setChannelMask(AudioFormat.CHANNEL_IN_MONO).build();
-                input = new AudioRecord.Builder().setAudioSource(MediaRecorder.AudioSource.VOICE_CALL)
+                input = new AudioRecord.Builder().setAudioSource(selectedSource)
                     .setContext(new ShellAudioContext()).setAudioFormat(format).setBufferSizeInBytes(Math.max(min * 2, 8192)).build();
                 if (input.getState() != AudioRecord.STATE_INITIALIZED) throw new IllegalStateException("AudioRecord init denied");
                 input.startRecording();
                 if (input.getRecordingState() != AudioRecord.RECORDSTATE_RECORDING) throw new IllegalStateException("Start recording refused");
                 sessionId = UUID.randomUUID().toString();
+                captureStartedNs = SystemClock.elapsedRealtimeNanos();
                 currentFile = new File(ROOT, sessionId + ".pcm");
                 capturing = true;
                 final AudioRecord recorder = input;

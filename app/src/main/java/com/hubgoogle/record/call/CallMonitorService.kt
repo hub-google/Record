@@ -96,6 +96,7 @@ class CallMonitorService : Service() {
     private suspend fun begin() {
         if (session != null) return
         try {
+            client.selectSource("CALL_MIX")
             val answer = client.start()
             if (!answer.startsWith("CAPTURING ")) { lastStatus = "通話來源無法錄製：" + answer; return }
             session = answer.removePrefix("CAPTURING ").trim()
