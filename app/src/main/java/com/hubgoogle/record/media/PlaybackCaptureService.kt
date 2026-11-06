@@ -115,52 +115,90 @@ class PlaybackCaptureService : Service() {
             liveLevel = 0
             startedElapsedMs = android.os.SystemClock.elapsedRealtime()
             lastStatus = "正在擷取允許錄製的音樂／遊戲聲音"
-            val file = Recordings(this).newFile("media")
-            val startNs = SystemClock.elapsedRealtimeNanos()
+
             worker = Thread({
-                val quality = QualityAccumulator()
-                val digest = MessageDigest.getInstance("SHA-256")
+                val recordings = Recordings(this)
+                val index = RecordingDatabase(this)
+                var file = recordings.newFile("media")
+                var startedNs = SystemClock.elapsedRealtimeNanos()
+                var writer: WavPcmFile? = null
+                var quality = QualityAccumulator()
+                var digest = MessageDigest.getInstance("SHA-256")
+                var segmentsSaved = 0
+                var silentSegments = 0
+                var interruptedByStorage = false
                 try {
-                    WavPcmFile(file, sampleRate, channels).use { wav ->
-                        val buffer = ByteArray(32768)
-                        while (running.get()) {
-                            val n = source.read(buffer, 0, buffer.size)
-                            if (n > 0) {
-                                wav.append(buffer, 0, n)
-                                quality.add(buffer, n)
-                                digest.update(buffer, 0, n)
-                                var sum = 0.0
-                                var cursor = 0
-                                while (cursor + 1 < n) {
-                                    val sample = ((buffer[cursor + 1].toInt() shl 8) or
-                                        (buffer[cursor].toInt() and 255)).toShort().toInt()
-                                    sum += sample.toDouble() * sample
-                                    cursor += 2
-                                }
-                                val rms = kotlin.math.sqrt(sum / maxOf(1, cursor / 2))
-                                liveLevel = if (rms < 1) 0 else
-                                    ((20 * kotlin.math.log10(rms / 32768.0) + 60) / 0.6)
-                                        .toInt().coerceIn(0, 100)
-                            }
-                            else if (n < 0) throw IllegalStateException("AudioRecord error: " + n)
+                    fun finish() {
+                        val wav = writer ?: return
+                        if (wav.dataBytes == 0L) {
+                            wav.close()
+                            file.delete()
+                            writer = null
+                            return
                         }
                         wav.commit()
+                        writer = null
+                        val result = quality.result()
+                        index.save(file, "MEDIA_PLAYBACK", sampleRate, channels,
+                            result, digest.digest().joinToString("") {
+                                "%02x".format(it.toInt() and 255)
+                            }, startedNs)
+                        segmentsSaved++
+                        if (result.isLikelySilent) silentSegments++
                     }
-                    val stats = quality.result()
-                    if (file.length() > 44) {
-                        RecordingDatabase(this).save(file, "MEDIA_PLAYBACK", sampleRate, channels,
-                            stats, digest.digest().joinToString("") { "%02x".format(it.toInt() and 0xff) },
-                            startNs)
-                    } else file.delete()
+                    writer = WavPcmFile(file, sampleRate, channels)
+                    val buffer = ByteArray(32768)
+                    while (running.get()) {
+                        val n = source.read(buffer, 0, buffer.size)
+                        if (n < 0) {
+                            // A stop may legitimately interrupt read.
+                            if (running.get()) throw IllegalStateException("AudioRecord read error: " + n)
+                            break
+                        }
+                        if (n == 0) continue
+                        if (filesDir.usableSpace < 16L * 1024 * 1024) {
+                            interruptedByStorage = true
+                            break
+                        }
+                        val activeWriter = checkNotNull(writer)
+                        if (activeWriter.dataBytes + n > 32L * 1024 * 1024) {
+                            finish()
+                            file = recordings.newFile("media")
+                            startedNs = SystemClock.elapsedRealtimeNanos()
+                            writer = WavPcmFile(file, sampleRate, channels)
+                            quality = QualityAccumulator()
+                            digest = MessageDigest.getInstance("SHA-256")
+                        }
+                        checkNotNull(writer).append(buffer, 0, n)
+                        quality.add(buffer, n)
+                        digest.update(buffer, 0, n)
+                        var power = 0.0
+                        var cursor = 0
+                        while (cursor + 1 < n) {
+                            val pcm = ((buffer[cursor + 1].toInt() shl 8) or
+                                (buffer[cursor].toInt() and 255)).toShort().toInt()
+                            power += pcm.toDouble() * pcm
+                            cursor += 2
+                        }
+                        val rms = kotlin.math.sqrt(power / maxOf(1, cursor / 2))
+                        liveLevel = if (rms < 1) 0 else
+                            ((20 * kotlin.math.log10(rms / 32768.0) + 60) / 0.6)
+                                .toInt().coerceIn(0, 100)
+                    }
+                    finish()
                     lastStatus = when {
-                        file.length() <= 44 -> "媒體來源未提供可錄製音訊"
-                        stats.isLikelySilent -> "媒體錄音已儲存但可能是靜音：" + file.name
-                        else -> "媒體錄音已儲存：" + file.name
+                        interruptedByStorage -> "儲存空間過低，已安全保存 " + segmentsSaved + " 個片段"
+                        segmentsSaved == 0 -> "媒體來源未提供可錄製音訊"
+                        silentSegments == segmentsSaved -> "已保存 " + segmentsSaved + " 段音訊，但可能全部是靜音"
+                        silentSegments > 0 -> "已保存 " + segmentsSaved + " 段；其中 " + silentSegments + " 段可能靜音"
+                        else -> "媒體錄製已保存 " + segmentsSaved + " 個完整 WAV 片段"
                     }
-                } catch (e: Exception) {
-                    Log.e("RecordCapture", "Media playback capture failed", e)
-                    lastStatus = "媒體錄音失敗：" + (e.message ?: e.javaClass.simpleName)
+                } catch (error: Exception) {
+                    Log.e("RecordCapture", "Media recording failed", error)
+                    lastStatus = "媒體錄製失敗；已保留 " + segmentsSaved +
+                        " 個先前完整片段：" + (error.message ?: error.javaClass.simpleName)
                 } finally {
+                    writer?.close()
                     active = false
                     stopSelf()
                 }
