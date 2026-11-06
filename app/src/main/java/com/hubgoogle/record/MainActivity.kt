@@ -83,6 +83,7 @@ private fun RecordScreen() {
     val daemon = remember { CallDaemonClient(context) }
     val library = remember { Recordings(context) }
     val matrix = remember { CompatibilityMatrix(context) }
+    var activeTab by remember { mutableStateOf("首頁") }
     var consent by remember { mutableStateOf(prefs.getBoolean("consent", false)) }
     var clearConfirmation by remember { mutableStateOf(false) }
     var biometricLock by remember { mutableStateOf(prefs.getBoolean("biometricLock", false)) }
@@ -237,6 +238,16 @@ private fun RecordScreen() {
         Text("Record", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
         Text("Android 非 Root 通話／內部聲音錄製", style = MaterialTheme.typography.bodyLarge)
         Text("程式碼開發版 • 系統與機型相容性仍需實機測試", color = MaterialTheme.colorScheme.error)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            listOf("首頁", "設定", "錄音", "錄音庫", "相容性", "隱私").forEach { tab ->
+                OutlinedButton(onClick = { activeTab = tab },
+                    colors = if (activeTab == tab) ButtonDefaults.outlinedButtonColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer
+                    ) else ButtonDefaults.outlinedButtonColors()) { Text(tab) }
+            }
+        }
+        if (activeTab == "首頁") {
         RecordSection("狀態與操作結果") {
             if (restartNotice) Text("偵測到手機重新啟動：通話錄音核心尚待驗證恢復", color = MaterialTheme.colorScheme.error)
             Text("通話音訊程序：" + if (daemonReady) "IPC 連線正常（音源尚須實機驗證）" else "尚未就緒")
@@ -245,6 +256,9 @@ private fun RecordScreen() {
             Text(feedback)
         }
 
+        Text("選擇「設定」完成 ADB 配對；「錄音」啟用通話／媒體；「錄音庫」管理檔案。")
+        }
+        if (activeTab == "設定") {
         RecordSection("1. 權限、告知與診斷") {
             Row {
                 Checkbox(checked = consent, onCheckedChange = {
@@ -369,6 +383,8 @@ private fun RecordScreen() {
                 style = MaterialTheme.typography.bodySmall)
         }
 
+        }
+        if (activeTab == "錄音") {
         RecordSection("3. 電信通話錄音") {
             Text(callState)
             Text("通話音源實際輸入電平：" + callLevel + " / 100 · 錄製 " + callElapsedMs / 1000 + " 秒")
@@ -467,6 +483,8 @@ private fun RecordScreen() {
                 style = MaterialTheme.typography.bodySmall)
         }
 
+        }
+        if (activeTab == "設定") {
         RecordSection("5. VoIP WhatsApp／Telegram（實驗性）") {
             Text("必須由你在 Android 系統授權通知存取，且通話 App 標記通知類別為「通話」。本功能不閱讀訊息、聯絡人或來電姓名。")
             Text("裝置是否允許擷取 VoIP 雙向音訊仍需要實機測試。")
@@ -487,6 +505,8 @@ private fun RecordScreen() {
             }, modifier = Modifier.fillMaxWidth()) { Text("開啟 Android 通知存取設定") }
             Text(VoipCallNotificationListener.state, style = MaterialTheme.typography.bodySmall)
         }
+        }
+        if (activeTab == "錄音庫") {
         if (biometricLock && !activity.recordingLibraryUnlocked.value) {
             RecordSection("5. 錄音庫已鎖定") {
                 Text("錄音檔名與內容受到裝置身分驗證保護。")
@@ -694,6 +714,8 @@ private fun RecordScreen() {
             }
         }
         }
+        }
+        if (activeTab == "相容性") {
         RecordSection("6. 設備相容性與實際驗收紀錄") {
             Text("以下結果是使用者在實機回放後手動標註，沒有測試的項目預設 NOT_TESTED。")
             Text("Android 靜態能力診斷不等於數位通話雙方音源驗證。")
@@ -727,6 +749,8 @@ private fun RecordScreen() {
             }, modifier = Modifier.fillMaxWidth()) { Text("匯出匿名設備相容性診斷 JSON") }
             Text("不包含電話號碼、錄音檔、配對碼或 ADB token。", style = MaterialTheme.typography.bodySmall)
         }
+        }
+        if (activeTab == "隱私") {
         RecordSection("隱私、告知及錄音資料清除") {
             Text("音訊與索引只保存在手機。分享及匯出由你主動操作，完整說明請閱讀 GitHub PRIVACY.md。")
             OutlinedButton(
@@ -772,6 +796,7 @@ private fun RecordScreen() {
                     }
                 )
             }
+        }
         }
         Text("相容性仍須以實體 Android 手機驗證。版本 0.1.0-dev，沒有雲端上傳或登入。", style = MaterialTheme.typography.bodySmall)
         Spacer(Modifier.height(24.dp))
