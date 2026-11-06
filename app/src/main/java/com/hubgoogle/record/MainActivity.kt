@@ -1,6 +1,9 @@
 package com.hubgoogle.record
 
 import android.Manifest
+import android.hardware.biometrics.BiometricManager
+import android.hardware.biometrics.BiometricPrompt
+import android.os.CancellationSignal
 import android.app.Activity
 import android.content.Intent
 import android.media.projection.MediaProjectionManager
@@ -39,6 +42,11 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
+    val recordingLibraryUnlocked = mutableStateOf(false)
+    override fun onStop() {
+        recordingLibraryUnlocked.value = false
+        super.onStop()
+    }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
@@ -62,12 +70,14 @@ private fun RecordSection(title: String, content: @Composable ColumnScope.() -> 
 @Composable
 private fun RecordScreen() {
     val context = LocalContext.current
+    val activity = context as MainActivity
     val scope = rememberCoroutineScope()
     val prefs = remember { context.getSharedPreferences("record", android.content.Context.MODE_PRIVATE) }
     val bootstrap = remember { ShellBootstrap(context) }
     val daemon = remember { CallDaemonClient(context) }
     val library = remember { Recordings(context) }
     var consent by remember { mutableStateOf(prefs.getBoolean("consent", false)) }
+    var biometricLock by remember { mutableStateOf(prefs.getBoolean("biometricLock", false)) }
     var retentionDays by remember { mutableIntStateOf(prefs.getInt("retentionDays", 0)) }
     var restartNotice by remember { mutableStateOf(prefs.getBoolean("needs_recovery", false)) }
     var pairPort by remember { mutableStateOf("") }
@@ -90,6 +100,34 @@ private fun RecordScreen() {
     ) { granted ->
         feedback = if (granted.values.all { it }) "已授權應用所需權限" else "部分權限未授予：功能可能受限"
     }
+    fun authenticateLibrary(onSuccess: () -> Unit) {
+        try {
+            val authenticators = BiometricManager.Authenticators.BIOMETRIC_STRONG or
+                BiometricManager.Authenticators.DEVICE_CREDENTIAL
+            val manager = context.getSystemService(BiometricManager::class.java)
+            if (manager.canAuthenticate(authenticators) != BiometricManager.BIOMETRIC_SUCCESS) {
+                feedback = "請先設定手機生物辨識或螢幕鎖定密碼"
+                return
+            }
+            BiometricPrompt.Builder(context)
+                .setTitle("驗證錄音庫身分")
+                .setSubtitle("使用裝置的生物辨識或螢幕解鎖")
+                .setAllowedAuthenticators(authenticators)
+                .build()
+                .authenticate(CancellationSignal(), context.mainExecutor,
+                    object : BiometricPrompt.AuthenticationCallback() {
+                        override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                            onSuccess()
+                        }
+                        override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                            feedback = "驗證未通過：" + errString
+                        }
+                    })
+        } catch (e: Exception) {
+            feedback = "裝置驗證功能不可用：" + e.message
+        }
+    }
+
     val projectionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -158,6 +196,16 @@ private fun RecordScreen() {
                 if (Build.VERSION.SDK_INT >= 33) requested.add(Manifest.permission.POST_NOTIFICATIONS)
                 permissionLauncher.launch(requested.toTypedArray())
             }, modifier = Modifier.fillMaxWidth()) { Text("授予通話狀態、音訊及通知權限") }
+            OutlinedButton(onClick = {
+                authenticateLibrary {
+                    biometricLock = !biometricLock
+                    prefs.edit().putBoolean("biometricLock", biometricLock).apply()
+                    activity.recordingLibraryUnlocked.value = true
+                    feedback = if (biometricLock) "已開啟錄音庫身分鎖定" else "已關閉錄音庫身分鎖定"
+                }
+            }, modifier = Modifier.fillMaxWidth()) {
+                Text(if (biometricLock) "關閉錄音庫生物辨識／裝置密碼鎖" else "啟用錄音庫生物辨識／裝置密碼鎖")
+            }
             Text(DeviceProbe.inspect(context).report(), style = MaterialTheme.typography.bodySmall)
             OutlinedButton(
                 onClick = { feedback = DeviceProbe.inspect(context).report() },
@@ -300,6 +348,14 @@ private fun RecordScreen() {
                 style = MaterialTheme.typography.bodySmall)
         }
 
+        if (biometricLock && !activity.recordingLibraryUnlocked.value) {
+            RecordSection("5. 錄音庫已鎖定") {
+                Text("錄音檔名與內容受到裝置身分驗證保護。")
+                Button(onClick = {
+                    authenticateLibrary { activity.recordingLibraryUnlocked.value = true }
+                }, modifier = Modifier.fillMaxWidth()) { Text("驗證並解鎖錄音庫") }
+            }
+        } else {
         RecordSection("5. 本機錄音檔（WAV / FLAC / ZIP）") {
             Text("錄音檔只在手機私有空間；分享必須由你手動操作。")
             Text("自動清理規則（預設保留全部）")
@@ -444,6 +500,7 @@ private fun RecordScreen() {
                     HorizontalDivider()
                 }
             }
+        }
         }
         Text("相容性仍須以實體 Android 手機驗證。版本 0.1.0-dev，沒有雲端上傳或登入。", style = MaterialTheme.typography.bodySmall)
         Spacer(Modifier.height(24.dp))
