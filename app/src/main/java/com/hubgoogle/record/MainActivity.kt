@@ -32,6 +32,8 @@ import com.hubgoogle.record.core.DeviceProbe
 import com.hubgoogle.record.core.CompatibilityMatrix
 import com.hubgoogle.record.data.Recordings
 import com.hubgoogle.record.media.PlaybackCaptureService
+import com.hubgoogle.record.media.TestTonePlayer
+import com.hubgoogle.record.audio.TestToneWavVerifier
 import com.hubgoogle.record.audio.WavWaveform
 import androidx.compose.foundation.Canvas
 import androidx.compose.ui.geometry.Offset
@@ -447,6 +449,12 @@ private fun RecordScreen() {
                 },
                 modifier = Modifier.fillMaxWidth()
             ) { Text("停止並保存媒體錄音") }
+            OutlinedButton(onClick = {
+                feedback = if (TestTonePlayer.play()) "正在播放 8 秒 440/880 Hz 測試音" else
+                    "測試音已在播放中"
+            }, modifier = Modifier.fillMaxWidth()) { Text("播放 440／880 Hz 音源驗證訊號") }
+            OutlinedButton(onClick = { TestTonePlayer.stop(); feedback = "已停止測試音" },
+                modifier = Modifier.fillMaxWidth()) { Text("停止測試音") }
             Text("僅錄製允許 AudioPlaybackCapture 的媒體／遊戲。通話與媒體同時錄製目前僅實驗性，不保證所有機型可用。",
                 style = MaterialTheme.typography.bodySmall)
         }
@@ -522,6 +530,19 @@ private fun RecordScreen() {
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
+                        if (item.file.extension == "wav" && item.details?.source == "MEDIA_PLAYBACK") {
+                            OutlinedButton(onClick = {
+                                scope.launch {
+                                    feedback = try {
+                                        val result = withContext(Dispatchers.IO) {
+                                            TestToneWavVerifier.check(item.file)
+                                        }
+                                        "測試聲音：440Hz " + (if (result.tone440) "檢出" else "未檢出") +
+                                            "；880Hz " + (if (result.tone880) "檢出" else "未檢出")
+                                    } catch (error: Exception) { "訊號分析失敗：" + error.message }
+                                }
+                            }) { Text("測試音檢測") }
+                        }
                         if (item.file.extension == "wav") {
                             OutlinedButton(onClick = {
                                 scope.launch {
