@@ -84,3 +84,14 @@
 - 至少一輪測試須由兩個受控聲源交替發聲，用回放判定是否確實錄到雙方；單純檔案存在、WAV Header 正確或 RMS 不為 0 **不足證明**雙向通話錄音成功。
 - 一項正式裝置支援聲明必須附其 OS Build 與完整通過的案例紀錄。
 
+
+## 本輪新增自動化測試與結果判定
+
+- 多音軌 ZIP：確認兩個獨立音檔及 session.json 的時間戳欄位；來源靜音時不應直接宣稱多訊號有效。
+- WAV：PCM16 RIFF header、失敗片段不得發布為正式 WAV、波形峰值分析。
+- 合成訊號：440 Hz / 880 Hz 交替播放器的數學訊號及 Goertzel 頻譜偵測，確認拒絕靜音及錯誤頻率。
+- shell：新增 16 MiB 分段與持久化開始時戳、SHA256 傳輸檢查及 UUID 去重。這些仍須實機測試 IPC 與檔案系統。
+- 媒體：新增 32 MiB 分段、空間不足後保存先前完整片段、靜音／錯誤通知。
+- 仍須 Android 真機才能驗證 FLAC／AAC／Opus、MediaProjection、ADB 自我配對、Android Keystore 與雙向通話，全部標為 NOT_TESTED，不能以 CI 綠燈冒充結果。
+
+CI 紀錄：https://github.com/hub-google/Record/actions
