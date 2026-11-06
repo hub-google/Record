@@ -16,9 +16,8 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-      - uses: android-actions/setup-android@v3
-      - name: Install Android 36 API
-        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+      - name: Install Android 36 API via runner SDK
+        run: sdkmanager --install "platforms;android-36" "build-tools;36.0.0"
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.7.1'
