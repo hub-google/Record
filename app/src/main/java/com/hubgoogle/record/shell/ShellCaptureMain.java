@@ -1,6 +1,10 @@
 package com.hubgoogle.record.shell;
 
 import android.media.AudioFormat;
+import android.os.Looper;
+import android.os.Process;
+import android.system.Os;
+import java.lang.reflect.Field;
 import android.media.AudioRecord;
 import android.media.MediaRecorder;
 import java.io.*;
@@ -33,7 +37,13 @@ public final class ShellCaptureMain {
         if (args.length != 2 || !args[1].matches("[0-9a-f]{64}")) throw new IllegalArgumentException("Invalid args");
         int port = Integer.parseInt(args[0]);
         if (port < 1024 || port > 65535) throw new IllegalArgumentException("Port");
+        if (Process.myUid() != Process.SHELL_UID) throw new SecurityException("Owner-authorized shell access required");
+        // The shell's default inherited umask may permit other shell users to
+        // inspect files. Enforce owner-only access to all newly created audio.
+        Os.umask(0077);
         if (!ROOT.isDirectory() && !ROOT.mkdirs()) throw new IOException("Cannot create private shell directory");
+        Os.chmod(ROOT.getAbsolutePath(), 0700);
+        prepareAndroidRuntime();
         ShellCaptureMain server = new ShellCaptureMain(args[1]);
         try (ServerSocket socket = new ServerSocket(port, 8, InetAddress.getByName("127.0.0.1"))) {
             while (true) {
@@ -45,6 +55,20 @@ public final class ShellCaptureMain {
                 if (server.quit) break;
             }
         } finally { server.stopCapture(); }
+    }
+    /**
+     * app_process does not have the normal Android Activity main looper.
+     * A valid Looper is required before AudioRecord/ActivityThread construction.
+     */
+    private static void prepareAndroidRuntime() {
+        if (Looper.myLooper() == null) Looper.prepare();
+        try {
+            Field field = Looper.class.getDeclaredField("sMainLooper");
+            field.setAccessible(true);
+            if (field.get(null) == null) field.set(null, Looper.myLooper());
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("Cannot prepare Android shell looper", e);
+        }
     }
     private volatile boolean quit = false;
     private String line(BufferedInputStream in) throws IOException {
