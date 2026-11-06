@@ -1,10 +1,7 @@
 package com.hubgoogle.record.audio
 
-import android.content.Context
-import android.os.SystemClock
 import com.hubgoogle.record.data.RecordingDetails
 import com.hubgoogle.record.data.RecordingFile
-import com.hubgoogle.record.data.Recordings
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.BufferedOutputStream
@@ -26,8 +23,12 @@ object MultiTrackExporter {
 
     fun findBestPair(call: RecordingFile, candidates: List<RecordingFile>): TrackPair? {
         val callInfo = call.details ?: return null
-        if (callInfo.source != "CALL_MIX" || call.file.extension == "enc") return null
-        return candidates.asSequence().filter { it.details?.source == "MEDIA_PLAYBACK" && it.file.extension != "enc" }
+        if (callInfo.source !in setOf("CALL_MIX", "CALL_TX", "CALL_RX") ||
+            call.file.extension == "enc" || callInfo.status in setOf("EMPTY", "SILENT") ||
+            callInfo.startedElapsedNs <= 0L) return null
+        return candidates.asSequence().filter { it.details?.source == "MEDIA_PLAYBACK" &&
+            it.file.extension != "enc" && it.details?.status !in setOf("EMPTY", "SILENT") &&
+            (it.details?.startedElapsedNs ?: 0L) > 0L }
             .mapNotNull { media ->
                 val info = media.details ?: return@mapNotNull null
                 val callStart = callInfo.startedElapsedNs
@@ -45,9 +46,8 @@ object MultiTrackExporter {
             .maxByOrNull { it.overlapMs }
     }
 
-    fun export(context: Context, pair: TrackPair): File {
+    fun export(pair: TrackPair): File {
         require(pair.overlapMs > 0)
-        val library = Recordings(context)
         val folder = pair.call.file.parentFile!!.canonicalFile
         check(pair.media.file.parentFile!!.canonicalFile == folder)
         val dest = File(folder, "multitrack_" + UUID.randomUUID().toString().take(12) + ".zip")

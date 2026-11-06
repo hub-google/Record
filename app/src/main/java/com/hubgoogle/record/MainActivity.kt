@@ -581,14 +581,14 @@ private fun RecordScreen() {
                                 }
                             }) { Text("加密") }
                         }
-                        if (item.file.extension !in setOf("enc", "zip") && item.details?.source == "CALL_MIX") {
+                        if (item.file.extension !in setOf("enc", "zip") && item.details?.source in setOf("CALL_MIX", "CALL_TX", "CALL_RX")) {
                             val pair = MultiTrackExporter.findBestPair(item, recordings)
                             if (pair != null) {
                                 OutlinedButton(onClick = {
                                     scope.launch {
                                         feedback = try {
                                             val dest = withContext(Dispatchers.IO) {
-                                                MultiTrackExporter.export(context, pair)
+                                                MultiTrackExporter.export(pair)
                                             }
                                             recordings = library.list()
                                             "多音軌封存完成：" + dest.name + "（兩路各自保留）"
