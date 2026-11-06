@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import com.hubgoogle.record.adb.CallDaemonClient
 import com.hubgoogle.record.adb.ShellBootstrap
 import com.hubgoogle.record.call.CallMonitorService
+import com.hubgoogle.record.call.VoipCallNotificationListener
 import com.hubgoogle.record.call.RecoveryScheduler
 import com.hubgoogle.record.core.DeviceProbe
 import com.hubgoogle.record.core.CompatibilityMatrix
@@ -83,6 +84,7 @@ private fun RecordScreen() {
     var consent by remember { mutableStateOf(prefs.getBoolean("consent", false)) }
     var biometricLock by remember { mutableStateOf(prefs.getBoolean("biometricLock", false)) }
     var autoRestore by remember { mutableStateOf(prefs.getBoolean("autoRestore", false)) }
+    var voipEnabled by remember { mutableStateOf(prefs.getBoolean("voipEnabled", false)) }
     var retentionDays by remember { mutableIntStateOf(prefs.getInt("retentionDays", 0)) }
     var restartNotice by remember { mutableStateOf(prefs.getBoolean("needs_recovery", false)) }
     var pairPort by remember { mutableStateOf("") }
@@ -449,6 +451,26 @@ private fun RecordScreen() {
                 style = MaterialTheme.typography.bodySmall)
         }
 
+        RecordSection("5. VoIP WhatsApp／Telegram（實驗性）") {
+            Text("必須由你在 Android 系統授權通知存取，且通話 App 標記通知類別為「通話」。本功能不閱讀訊息、聯絡人或來電姓名。")
+            Text("裝置是否允許擷取 VoIP 雙向音訊仍需要實機測試。")
+            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                Switch(checked = voipEnabled, onCheckedChange = {
+                    if (!consent) {
+                        feedback = "請先閱讀並勾選錄音合規聲明"
+                    } else {
+                        voipEnabled = it
+                        prefs.edit().putBoolean("voipEnabled", it).apply()
+                        feedback = if (it) "已允許 VoIP 測試；還需系統通知存取授權" else "VoIP 測試已停用"
+                    }
+                })
+                Text("允許嘗試自動偵測 VoIP 通話", modifier = Modifier.padding(start = 8.dp))
+            }
+            OutlinedButton(onClick = {
+                context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+            }, modifier = Modifier.fillMaxWidth()) { Text("開啟 Android 通知存取設定") }
+            Text(VoipCallNotificationListener.state, style = MaterialTheme.typography.bodySmall)
+        }
         if (biometricLock && !activity.recordingLibraryUnlocked.value) {
             RecordSection("5. 錄音庫已鎖定") {
                 Text("錄音檔名與內容受到裝置身分驗證保護。")

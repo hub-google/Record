@@ -108,6 +108,12 @@ class RecordingDatabase(context: Context) : SQLiteOpenHelper(context, "record_in
         writableDatabase.insertWithOnConflict("recordings", null, values, SQLiteDatabase.CONFLICT_REPLACE)
     }
 
+    fun updateSource(filename: String, source: String) {
+        require(source in setOf("CALL_MIX", "CALL_TX", "CALL_RX",
+            "VOIP_WHATSAPP", "VOIP_TELEGRAM", "MEDIA_PLAYBACK"))
+        val values = ContentValues().apply { put("source", source) }
+        writableDatabase.update("recordings", values, "filename=?", arrayOf(filename))
+    }
     fun rename(oldName: String, newName: String) {
         val values = ContentValues().apply { put("filename", newName) }
         writableDatabase.update("recordings", values, "filename=?", arrayOf(oldName))
