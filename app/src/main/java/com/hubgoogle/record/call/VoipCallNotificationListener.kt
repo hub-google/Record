@@ -67,6 +67,9 @@ class VoipCallNotificationListener : NotificationListenerService() {
         scope.launch {
             mutex.withLock {
                 if (currentKey != null) return@withLock
+                // An incoming call notification can disappear before this
+                // coroutine acquires the lock. Never start after removal.
+                if (activeNotifications?.none { it.key == sbn.key } != false) return@withLock
                 try {
                     daemon.selectSource("CALL_MIX")
                     val start = daemon.start()
@@ -95,9 +98,11 @@ class VoipCallNotificationListener : NotificationListenerService() {
     }
 
     override fun onNotificationRemoved(sbn: StatusBarNotification?) {
-        if (sbn?.key != currentKey) return
+        val key = sbn?.key ?: return
         scope.launch {
-            mutex.withLock { finish() }
+            mutex.withLock {
+                if (key == currentKey) finish()
+            }
         }
     }
 

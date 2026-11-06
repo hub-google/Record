@@ -20,6 +20,7 @@ import android.os.IBinder
 import android.os.Looper
 import android.util.Log
 import com.hubgoogle.record.audio.WavPcmFile
+import com.hubgoogle.record.core.RecordingAlert
 import com.hubgoogle.record.data.Recordings
 import com.hubgoogle.record.data.RecordingDatabase
 import com.hubgoogle.record.core.QualityAccumulator
@@ -193,10 +194,14 @@ class PlaybackCaptureService : Service() {
                         silentSegments > 0 -> "已保存 " + segmentsSaved + " 段；其中 " + silentSegments + " 段可能靜音"
                         else -> "媒體錄製已保存 " + segmentsSaved + " 個完整 WAV 片段"
                     }
+                    if (interruptedByStorage || silentSegments > 0 || segmentsSaved == 0) {
+                        RecordingAlert.show(this, "媒體錄音需要檢查", lastStatus)
+                    }
                 } catch (error: Exception) {
                     Log.e("RecordCapture", "Media recording failed", error)
                     lastStatus = "媒體錄製失敗；已保留 " + segmentsSaved +
                         " 個先前完整片段：" + (error.message ?: error.javaClass.simpleName)
+                    RecordingAlert.show(this, "媒體錄製失敗", lastStatus)
                 } finally {
                     writer?.close()
                     active = false
@@ -206,6 +211,7 @@ class PlaybackCaptureService : Service() {
         } catch (e: Exception) {
             Log.e("RecordCapture", "Cannot start", e)
             lastStatus = "媒體擷取無法啟動：" + (e.message ?: e.javaClass.simpleName)
+            RecordingAlert.show(this, "媒體錄音啟動失敗", lastStatus)
             stopCapture(); stopSelf()
         }
         return START_NOT_STICKY

@@ -14,6 +14,8 @@ import android.telephony.TelephonyCallback
 import android.telephony.TelephonyManager
 import android.util.Log
 import com.hubgoogle.record.adb.CallDaemonClient
+import com.hubgoogle.record.core.RecordingAlert
+import com.hubgoogle.record.data.RecordingDatabase
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -98,11 +100,16 @@ class CallMonitorService : Service() {
         try {
             client.selectSource("CALL_MIX")
             val answer = client.start()
-            if (!answer.startsWith("CAPTURING ")) { lastStatus = "通話來源無法錄製：" + answer; return }
+            if (!answer.startsWith("CAPTURING ")) {
+                lastStatus = "通話來源無法錄製：" + answer
+                RecordingAlert.show(this, "通話錄音未開始", lastStatus)
+                return
+            }
             session = answer.removePrefix("CAPTURING ").trim()
             lastStatus = "通話錄音中"
         } catch (e: Exception) {
             lastStatus = "通話錄音未啟動：" + e.message
+            RecordingAlert.show(this, "通話錄音失敗", lastStatus)
         }
     }
     private suspend fun end() {
@@ -110,16 +117,30 @@ class CallMonitorService : Service() {
         session = null
         try {
             val answer = client.stop()
-            if (!answer.startsWith("STOPPED ")) { lastStatus = "通話錄音不完整：" + answer; return }
+            if (!answer.startsWith("STOPPED ")) {
+                lastStatus = "通話錄音不完整：" + answer
+                RecordingAlert.show(this, "通話錄音不完整", lastStatus)
+                return
+            }
             var count = 0
+            var silent = 0
+            val database = RecordingDatabase(this)
             for (id in client.pending()) {
-                client.fetch(id)
+                val file = client.fetch(id)
+                val status = database.details(file.name)?.status
+                if (status == "EMPTY" || status == "SILENT") silent++
                 count++
             }
-            lastStatus = if (count > 0) "通話錄音已儲存 " + count + " 個完整音訊片段" else
-                "沒有可保存的通話音訊片段"
+            lastStatus = when {
+                count == 0 -> "沒有可保存的通話音訊片段"
+                silent == count -> "已儲存 " + count + " 段，但全部可能是靜音"
+                silent > 0 -> "已儲存 " + count + " 段，其中 " + silent + " 段可能靜音"
+                else -> "已儲存 " + count + " 個音訊片段（雙向內容尚需回放確認）"
+            }
+            if (count == 0 || silent > 0) RecordingAlert.show(this, "通話音訊可能不完整", lastStatus)
         } catch (e: Exception) {
             lastStatus = "通話錄音傳輸失敗：" + e.message
+            RecordingAlert.show(this, "通話片段儲存失敗", lastStatus)
         }
     }
     override fun onDestroy() {
