@@ -26,17 +26,20 @@ class RecoveryWorker(context: Context, params: WorkerParameters) : CoroutineWork
             return Result.success()
         }
         val daemon = CallDaemonClient(applicationContext)
-        if (daemon.ping()) {
-            prefs.edit().putString("lastRecovery", "服務仍在執行").apply()
-            return Result.success()
-        }
         return try {
             // Only local, authenticated ADB; no remote ADB hosts accepted.
-            AdbTransport.autoConnect(applicationContext).getOrThrow()
-            ShellBootstrap(applicationContext).startDaemon().getOrThrow()
+            if (!daemon.ping()) {
+                AdbTransport.autoConnect(applicationContext).getOrThrow()
+                ShellBootstrap(applicationContext).startDaemon().getOrThrow()
+            }
             check(daemon.ping()) { "Daemon did not respond to authenticated probe" }
+            var saved = 0
+            for (id in daemon.pending()) {
+                daemon.fetch(id)
+                saved++
+            }
             prefs.edit().putBoolean("needs_recovery", false)
-                .putString("lastRecovery", "背景復原成功").apply()
+                .putString("lastRecovery", "背景連線檢查成功；收取 " + saved + " 筆錄音片段").apply()
             Result.success()
         } catch (e: Exception) {
             prefs.edit().putBoolean("needs_recovery", true)

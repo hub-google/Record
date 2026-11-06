@@ -172,7 +172,7 @@ private fun RecordScreen() {
         Text("程式碼開發版 • 系統與機型相容性仍需實機測試", color = MaterialTheme.colorScheme.error)
         RecordSection("狀態與操作結果") {
             if (restartNotice) Text("偵測到手機重新啟動：通話錄音核心尚待驗證恢復", color = MaterialTheme.colorScheme.error)
-            Text("通話音訊服務：" + if (daemonReady) "就緒" else "尚未就緒")
+            Text("通話音訊程序：" + if (daemonReady) "IPC 連線正常（音源尚須實機驗證）" else "尚未就緒")
             Text("通話監控：" + if (monitorActive) "已開啟" else "未啟用")
             Text("媒體錄音：" + if (mediaActive) "進行中" else "未錄製")
             Text(feedback)
