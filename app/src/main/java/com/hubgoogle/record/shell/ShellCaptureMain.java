@@ -251,10 +251,10 @@ public final class ShellCaptureMain {
                         String nextId = UUID.randomUUID().toString();
                         long nextStartedNs = SystemClock.elapsedRealtimeNanos();
                         try (FileWriter metadata = new FileWriter(sessionMetadata(nextId))) {
-                            metadata.write(Long.toString(nextStartedNs) + "\\n");
+                            metadata.write(Long.toString(nextStartedNs) + "\n");
                             metadata.write(Integer.toString(
                                 selectedName.equals("CALL_TX") ? 1 :
-                                selectedName.equals("CALL_RX") ? 2 : 0) + "\\n");
+                                selectedName.equals("CALL_RX") ? 2 : 0) + "\n");
                         }
                         File nextFile = new File(ROOT, nextId + ".pcm");
                         stream = new BufferedOutputStream(new FileOutputStream(nextFile));
