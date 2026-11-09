@@ -14,6 +14,13 @@ data class RecordingFile(val file: File, val modified: Long, val size: Long, val
 class Recordings(private val context: Context) {
     private val dir = File(context.filesDir, "recordings").apply { mkdirs() }
     private val database by lazy { RecordingDatabase(context) }
+    private var currentPlayer: MediaPlayer? = null
+    fun stopPlaying() {
+        val player = currentPlayer ?: return
+        currentPlayer = null
+        runCatching { if (player.isPlaying) player.stop() }
+        runCatching { player.release() }
+    }
     /** Deterministic name for shell session recovery and idempotent fetch. */
     fun sessionFile(prefix: String, sessionId: String): File {
         require(Regex("[0-9a-fA-F-]{36}").matches(sessionId))
@@ -106,12 +113,31 @@ class Recordings(private val context: Context) {
         ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
     fun play(file: File, onCompletion: () -> Unit = {}): MediaPlayer {
-        check(isOwned(file))
-        return MediaPlayer().apply {
-            setDataSource(file.absolutePath)
-            setOnCompletionListener { onCompletion(); it.release() }
-            prepare()
-            start()
+        check(isOwned(file) && file.isFile && file.extension in setOf("wav", "flac", "m4a", "ogg")) {
+            "Only unencrypted audio from the local recording library can be played"
+        }
+        stopPlaying()
+        val player = MediaPlayer()
+        try {
+            player.setDataSource(file.absolutePath)
+            player.setOnCompletionListener {
+                if (currentPlayer === it) currentPlayer = null
+                runCatching { it.release() }
+                onCompletion()
+            }
+            player.setOnErrorListener { source, _, _ ->
+                if (currentPlayer === source) currentPlayer = null
+                runCatching { source.release() }
+                true
+            }
+            player.prepare()
+            currentPlayer = player
+            player.start()
+            return player
+        } catch (error: Exception) {
+            if (currentPlayer === player) currentPlayer = null
+            runCatching { player.release() }
+            throw error
         }
     }
 }

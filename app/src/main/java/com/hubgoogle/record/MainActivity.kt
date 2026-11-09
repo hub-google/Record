@@ -582,6 +582,10 @@ private fun RecordScreen() {
                 feedback = if (retentionDays == 0) "未啟用自動清理" else "已清除 " + count + " 個過期檔案"
             }, modifier = Modifier.fillMaxWidth()) { Text("立即執行保留期限清理") }
             Button(onClick = { recordings = library.list() }, modifier = Modifier.fillMaxWidth()) { Text("重新整理錄音列表") }
+            OutlinedButton(onClick = {
+                library.stopPlaying()
+                feedback = "已停止本機錄音播放"
+            }, modifier = Modifier.fillMaxWidth()) { Text("停止播放") }
             OutlinedTextField(
                 value = search, onValueChange = { search = it },
                 label = { Text("搜尋檔名或音訊來源") },
