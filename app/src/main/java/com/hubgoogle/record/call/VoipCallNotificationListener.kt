@@ -33,10 +33,6 @@ class VoipCallNotificationListener : NotificationListenerService() {
     companion object {
         @Volatile var state: String = "VoIP 監控未啟用"
             private set
-        private val supported = mapOf(
-            "com.whatsapp" to "VOIP_WHATSAPP",
-            "org.telegram.messenger" to "VOIP_TELEGRAM"
-        )
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -47,12 +43,12 @@ class VoipCallNotificationListener : NotificationListenerService() {
 
     override fun onListenerConnected() {
         super.onListenerConnected()
-        state = "通知監聽已授權；僅監測 WhatsApp／Telegram 的通話類別"
+        state = "通知監聽已授權；僅監測 LINE／WhatsApp／Telegram 等通訊 App 的通話類別"
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         val notification = sbn?.notification ?: return
-        val source = supported[sbn.packageName] ?: return
+        val source = VoipSourceRegistry.source(sbn.packageName) ?: return
         if (notification.category != Notification.CATEGORY_CALL) return
         val prefs = getSharedPreferences("record", MODE_PRIVATE)
         if (!prefs.getBoolean("consent", false) || !prefs.getBoolean("voipEnabled", false)) return
@@ -88,7 +84,7 @@ class VoipCallNotificationListener : NotificationListenerService() {
                         .setSmallIcon(android.R.drawable.ic_btn_speak_now)
                         .setOngoing(true)
                         .setContentTitle("Record 正在嘗試錄製 VoIP 音訊")
-                        .setContentText("僅限使用者已開啟的 WhatsApp／Telegram 來源").build())
+                        .setContentText("僅限使用者已開啟的 LINE／WhatsApp／Telegram 等通訊 App 來源").build())
                 } catch (error: Exception) {
                     state = "VoIP 啟動失敗：" + error.message
                     Log.w("RecordVoip", "Start failed", error)

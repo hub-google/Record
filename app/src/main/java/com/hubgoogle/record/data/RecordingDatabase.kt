@@ -5,6 +5,7 @@ import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import com.hubgoogle.record.core.QualityResult
+import com.hubgoogle.record.call.VoipSourceRegistry
 import java.io.File
 
 data class RecordingDetails(
@@ -109,8 +110,7 @@ class RecordingDatabase(context: Context) : SQLiteOpenHelper(context, "record_in
     }
 
     fun updateSource(filename: String, source: String) {
-        require(source in setOf("CALL_MIX", "CALL_TX", "CALL_RX",
-            "VOIP_WHATSAPP", "VOIP_TELEGRAM", "MEDIA_PLAYBACK"))
+        require(source in (setOf("CALL_MIX", "CALL_TX", "CALL_RX", "MEDIA_PLAYBACK", "MIC") + VoipSourceRegistry.packages.values))
         val values = ContentValues().apply { put("source", source) }
         writableDatabase.update("recordings", values, "filename=?", arrayOf(filename))
     }
