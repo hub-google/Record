@@ -40,6 +40,7 @@ import androidx.compose.ui.geometry.Offset
 import com.hubgoogle.record.audio.FlacTranscoder
 import com.hubgoogle.record.audio.CompressedTranscoder
 import com.hubgoogle.record.audio.MultiTrackExporter
+import com.hubgoogle.record.audio.SynchronizedMixer
 import com.hubgoogle.record.security.SecureVault
 import com.hubgoogle.record.data.RecordingDatabase
 import kotlinx.coroutines.Dispatchers
@@ -623,6 +624,22 @@ private fun RecordScreen() {
                                         } catch (e: Exception) { "多音軌封存失敗：" + e.message }
                                     }
                                 }) { Text("匯出同期雙音軌") }
+                                if (item.file.extension == "wav" && pair.media.file.extension == "wav") {
+                                    OutlinedButton(onClick = {
+                                        scope.launch {
+                                            feedback = "正在按實際擷取時間戳混音（不能修復來源缺音）"
+                                            feedback = try {
+                                                val file = withContext(Dispatchers.IO) {
+                                                    SynchronizedMixer.mix(pair)
+                                                }
+                                                recordings = library.list()
+                                                "混音完成：" + file.name + "（48kHz PCM；來源音質未經雙向驗收）"
+                                            } catch (error: Exception) {
+                                                "同步混音失敗：" + error.message
+                                            }
+                                        }
+                                    }) { Text("混音成 WAV") }
+                                }
                             }
                         }
                         if (item.file.extension != "zip" && item.file.extension != "enc") OutlinedButton(onClick = {
