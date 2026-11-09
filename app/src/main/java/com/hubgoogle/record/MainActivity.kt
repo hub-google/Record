@@ -30,6 +30,7 @@ import com.hubgoogle.record.call.VoipCallNotificationListener
 import com.hubgoogle.record.call.RecoveryScheduler
 import com.hubgoogle.record.core.DeviceProbe
 import com.hubgoogle.record.core.CompatibilityMatrix
+import com.hubgoogle.record.core.AcceptanceJournal
 import com.hubgoogle.record.data.Recordings
 import com.hubgoogle.record.media.PlaybackCaptureService
 import com.hubgoogle.record.media.MicCaptureService
@@ -85,6 +86,7 @@ private fun RecordScreen() {
     val daemon = remember { CallDaemonClient(context) }
     val library = remember { Recordings(context) }
     val matrix = remember { CompatibilityMatrix(context) }
+    val journal = remember { AcceptanceJournal(context) }
     var activeTab by remember { mutableStateOf("首頁") }
     var consent by remember { mutableStateOf(prefs.getBoolean("consent", false)) }
     var clearConfirmation by remember { mutableStateOf(false) }
@@ -105,6 +107,12 @@ private fun RecordScreen() {
     var micState by remember { mutableStateOf("") }
     var selectedSource by remember { mutableStateOf("CALL_MIX") }
     var selectedFeature by remember { mutableStateOf("CALL_MIX") }
+    var trialDirection by remember { mutableStateOf("OUTGOING") }
+    var trialRoute by remember { mutableStateOf("EARPIECE") }
+    var trialSelfAudible by remember { mutableStateOf(false) }
+    var trialRemoteAudible by remember { mutableStateOf(false) }
+    var trialFile by remember { mutableStateOf("") }
+    var recordedTrials by remember { mutableStateOf(journal.list()) }
     var selectedOutcome by remember { mutableStateOf(matrix.result("CALL_MIX")) }
     var reportJson by remember { mutableStateOf("") }
     var monitorActive by remember { mutableStateOf(false) }
@@ -757,6 +765,80 @@ private fun RecordScreen() {
         }
         }
         if (activeTab == "相容性") {
+        RecordSection("通話雙方驗收紀錄（只在你實際回放後填寫）") {
+            Text("請選一段實際電話錄音，聽清楚自己和對方輪流說的測試內容，再儲存結果；不會讀取或上傳通話內容。")
+            val eligible = recordings.filter { it.details?.source in setOf("CALL_MIX","CALL_TX","CALL_RX") &&
+                it.file.extension == "wav" && it.details?.sha256?.length == 64 }
+            if (eligible.isEmpty()) {
+                Text("尚無可驗收的本機通話 WAV 錄音")
+            } else {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    eligible.take(20).forEach { recording ->
+                        OutlinedButton(onClick = { trialFile = recording.file.name },
+                            colors = if (trialFile == recording.file.name)
+                                ButtonDefaults.outlinedButtonColors(
+                                    containerColor = MaterialTheme.colorScheme.primaryContainer)
+                            else ButtonDefaults.outlinedButtonColors()) {
+                            Text(recording.file.name.take(19))
+                        }
+                    }
+                }
+                Text("目前選擇：" + if (trialFile.isBlank()) "尚未選擇" else trialFile)
+            }
+            Text("方向")
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                listOf("OUTGOING" to "撥出", "INCOMING" to "接聽").forEach { (value, label) ->
+                    OutlinedButton(onClick = { trialDirection = value },
+                        colors = if (trialDirection == value)
+                            ButtonDefaults.outlinedButtonColors(
+                                containerColor = MaterialTheme.colorScheme.primaryContainer)
+                        else ButtonDefaults.outlinedButtonColors()) { Text(label) }
+                }
+            }
+            Text("音訊路由")
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                listOf("EARPIECE" to "聽筒", "SPEAKER" to "擴音",
+                    "BLUETOOTH" to "藍牙", "OTHER" to "其他").forEach { (value, label) ->
+                    OutlinedButton(onClick = { trialRoute = value },
+                        colors = if (trialRoute == value)
+                            ButtonDefaults.outlinedButtonColors(
+                                containerColor = MaterialTheme.colorScheme.primaryContainer)
+                        else ButtonDefaults.outlinedButtonColors()) { Text(label) }
+                }
+            }
+            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                Checkbox(checked = trialSelfAudible, onCheckedChange = { trialSelfAudible = it })
+                Text("我回放後確認聽見自己聲音")
+            }
+            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                Checkbox(checked = trialRemoteAudible, onCheckedChange = { trialRemoteAudible = it })
+                Text("我回放後確認聽見對方聲音")
+            }
+            Button(enabled = trialFile.isNotBlank(), onClick = {
+                feedback = try {
+                    val source = eligible.first { it.file.name == trialFile }
+                    val record = journal.add(source, trialDirection, trialRoute,
+                        trialSelfAudible, trialRemoteAudible)
+                    recordedTrials = journal.list()
+                    trialFile = ""
+                    trialSelfAudible = false
+                    trialRemoteAudible = false
+                    "已紀錄 " + record.source + "：" +
+                        (if (record.twoPartyPass) "人工確認雙方有聲" else "單邊／不完整；不計成功")
+                } catch (error: Exception) { "無法儲存驗收：" + error.message }
+            }, modifier = Modifier.fillMaxWidth()) { Text("保存這次人工驗收") }
+            val summary = journal.summary()
+            Text("本 Android Build：有檔案佐證的獨立測試 " + summary.attempts +
+                " 通；人工確認雙方有聲 " + summary.bothAudible +
+                " 通；來電 " + summary.incoming + "／去電 " + summary.outgoing)
+            Text(if (summary.meetsSelfReportedBaseline)
+                "已達人工回報 10 通至少 9 通雙方有聲的最低數字門檻；仍須獨立測試確認。"
+                else "尚未達 10 通至少 9 通雙方有聲的最低數字門檻。")
+            Text("僅限目前系統 Build；同一音檔的 SHA-256 不會重複計數。")
+            OutlinedButton(onClick = {
+                recordedTrials = journal.list()
+            }, modifier = Modifier.fillMaxWidth()) { Text("重新整理驗收紀錄") }
+        }
         RecordSection("6. 設備相容性與實際驗收紀錄") {
             Text("以下結果是使用者在實機回放後手動標註，沒有測試的項目預設 NOT_TESTED。")
             Text("Android 靜態能力診斷不等於數位通話雙方音源驗證。")
@@ -785,7 +867,7 @@ private fun RecordScreen() {
                 }
             }
             OutlinedButton(onClick = {
-                reportJson = matrix.toJson().toString(2)
+                reportJson = journal.exportJson().toString(2)
                 reportExport.launch("record-compatibility.json")
             }, modifier = Modifier.fillMaxWidth()) { Text("匯出匿名設備相容性診斷 JSON") }
             Text("不包含電話號碼、錄音檔、配對碼或 ADB token。", style = MaterialTheme.typography.bodySmall)
