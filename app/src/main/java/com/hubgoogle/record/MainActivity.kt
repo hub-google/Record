@@ -45,6 +45,7 @@ import com.hubgoogle.record.audio.CompressedTranscoder
 import com.hubgoogle.record.audio.MultiTrackExporter
 import com.hubgoogle.record.audio.SynchronizedMixer
 import com.hubgoogle.record.audio.SessionBundleExporter
+import com.hubgoogle.record.audio.SessionMixer
 import com.hubgoogle.record.security.SecureVault
 import com.hubgoogle.record.data.RecordingDatabase
 import kotlinx.coroutines.Dispatchers
@@ -750,6 +751,21 @@ private fun RecordScreen() {
                                     }
                                 }
                             }) { Text("封存同期所有音軌") }
+                            OutlinedButton(onClick = {
+                                scope.launch {
+                                    feedback = "正在合併同期可用的錄音來源"
+                                    feedback = try {
+                                        val result = withContext(Dispatchers.IO) {
+                                            SessionMixer.mix(SessionBundleExporter.plan(item, library.list()))
+                                        }
+                                        recordings = library.list()
+                                        "已產出同期混音：" + result.name +
+                                            "；無法擷取的來源不會被補造"
+                                    } catch (e: Exception) {
+                                        "多來源混音失敗：" + e.message
+                                    }
+                                }
+                            }) { Text("同期音源合成 WAV") }
                         }
                         if (item.file.extension !in setOf("enc", "zip") && item.details?.source in setOf("CALL_MIX", "CALL_TX", "CALL_RX")) {
                             val pair = MultiTrackExporter.findBestPair(item, recordings)
