@@ -28,6 +28,6 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.7.1'
-      - name: Compile Kotlin and Java, and run unit tests (no APK)
-        run: ./gradlew --no-daemon :app:compileDebugKotlin :app:compileDebugJavaWithJavac :app:testDebugUnitTest
+      - name: Compile Kotlin and Java, run unit tests and static lint (no APK published)
+        run: ./gradlew --no-daemon :app:compileDebugKotlin :app:compileDebugJavaWithJavac :app:testDebugUnitTest :app:lintDebug
 
