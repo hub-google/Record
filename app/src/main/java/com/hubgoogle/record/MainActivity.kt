@@ -27,6 +27,7 @@ import com.hubgoogle.record.adb.CallDaemonClient
 import com.hubgoogle.record.adb.ShellBootstrap
 import com.hubgoogle.record.call.CallMonitorService
 import com.hubgoogle.record.call.VoipCallNotificationListener
+import com.hubgoogle.record.call.VoipSourceRegistry
 import com.hubgoogle.record.call.RecoveryScheduler
 import com.hubgoogle.record.core.DeviceProbe
 import com.hubgoogle.record.core.CompatibilityMatrix
@@ -43,6 +44,7 @@ import com.hubgoogle.record.audio.FlacTranscoder
 import com.hubgoogle.record.audio.CompressedTranscoder
 import com.hubgoogle.record.audio.MultiTrackExporter
 import com.hubgoogle.record.audio.SynchronizedMixer
+import com.hubgoogle.record.audio.SessionBundleExporter
 import com.hubgoogle.record.security.SecureVault
 import com.hubgoogle.record.data.RecordingDatabase
 import kotlinx.coroutines.Dispatchers
@@ -106,6 +108,8 @@ private fun RecordScreen() {
     var micLevel by remember { mutableIntStateOf(0) }
     var micState by remember { mutableStateOf("") }
     var selectedSource by remember { mutableStateOf("CALL_MIX") }
+    var combinedRequested by remember { mutableStateOf(false) }
+    var includeMicWithCombined by remember { mutableStateOf(false) }
     var selectedFeature by remember { mutableStateOf("CALL_MIX") }
     var trialDirection by remember { mutableStateOf("OUTGOING") }
     var trialRoute by remember { mutableStateOf("EARPIECE") }
@@ -208,10 +212,42 @@ private fun RecordScreen() {
                     putExtra(PlaybackCaptureService.EXTRA_CODE, result.resultCode)
                     putExtra(PlaybackCaptureService.EXTRA_DATA, result.data)
                 }
-                context.startForegroundService(request)
-                feedback = "已送出錄製請求，檢查錄音狀態"
-            } catch (e: Exception) { feedback = "無法啟動 MediaProjection：" + e.message }
-        } else feedback = "已取消 Android 系統音訊擷取授權"
+                if (combinedRequested) {
+                    combinedRequested = false
+                    scope.launch {
+                        feedback = try {
+                            daemon.selectSource("CALL_MIX")
+                            val answer = daemon.start()
+                            if (!answer.startsWith("CAPTURING ")) {
+                                "通話錄製失敗：" + answer + "；未啟動同期媒體錄製"
+                            } else {
+                                manualId = answer.removePrefix("CAPTURING ").trim()
+                                context.startForegroundService(request)
+                                if (includeMicWithCombined) {
+                                    runCatching {
+                                        context.startForegroundService(
+                                            Intent(context, MicCaptureService::class.java)
+                                                .setAction(MicCaptureService.ACTION_START))
+                                    }.onFailure { feedback = "麥克風啟動請求失敗：" + it.message }
+                                }
+                                "通話與媒體錄音啟動請求已送出；請檢查兩邊實際電平並回放確認"
+                            }
+                        } catch (e: Exception) {
+                            "同期錄製啟動失敗：" + e.message
+                        }
+                    }
+                } else {
+                    context.startForegroundService(request)
+                    feedback = "已送出媒體錄製請求，請檢查錄音狀態"
+                }
+            } catch (e: Exception) {
+                combinedRequested = false
+                feedback = "無法啟動 MediaProjection：" + e.message
+            }
+        } else {
+            combinedRequested = false
+            feedback = "已取消 Android 系統音訊擷取授權"
+        }
     }
 
     LaunchedEffect(Unit) {
@@ -483,6 +519,45 @@ private fun RecordScreen() {
             }, modifier = Modifier.fillMaxWidth()) { Text("停止並保存通話 WAV") }
         }
 
+        RecordSection("手機同期多來源錄音（試驗）") {
+            Text("依序要求電信通話音源及 Android 系統授權的媒體音訊。選用的麥克風會作為獨立音軌，不是對方通話聲音。")
+            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                Checkbox(checked = includeMicWithCombined, onCheckedChange = { includeMicWithCombined = it })
+                Text("也錄製獨立麥克風音軌（通話中可能被系統靜音）")
+            }
+            Button(
+                enabled = consent && daemonReady && !monitorActive && manualId == null && !mediaActive,
+                onClick = {
+                    combinedRequested = true
+                    val manager = context.getSystemService(MediaProjectionManager::class.java)
+                    projectionLauncher.launch(manager.createScreenCaptureIntent())
+                }, modifier = Modifier.fillMaxWidth()
+            ) { Text("同時錄製通話＋音樂／遊戲") }
+            OutlinedButton(enabled = manualId != null || mediaActive || micActive, onClick = {
+                scope.launch {
+                    val mode = manualId
+                    if (mode != null) {
+                        feedback = try {
+                            val answer = if (mode == "DUAL") daemon.stopDual() else daemon.stop()
+                            var saved = 0
+                            if (answer.startsWith("STOPPED")) {
+                                for (session in daemon.pending()) { daemon.fetch(session); saved++ }
+                                manualId = null
+                            }
+                            "通話錄音停止：" + answer + "；收取 " + saved + " 個音檔"
+                        } catch (e: Exception) { "通話停止或儲存失敗：" + e.message }
+                    }
+                    if (mediaActive) context.startService(Intent(context, PlaybackCaptureService::class.java)
+                        .setAction(PlaybackCaptureService.ACTION_STOP))
+                    if (micActive) context.startService(Intent(context, MicCaptureService::class.java)
+                        .setAction(MicCaptureService.ACTION_STOP))
+                    recordings = library.list()
+                }
+            }, modifier = Modifier.fillMaxWidth()) { Text("停止並保存所有已啟動的音軌") }
+            Text("每個來源會分別呈現電平和錄製結果。通話中 Android 可能阻擋其他音源，不能將按鈕成功視作全部聲音成功。",
+                style = MaterialTheme.typography.bodySmall)
+        }
+
         RecordSection("4. 音樂、遊戲、App 內部聲音") {
             Text(mediaState)
             Text("媒體實際輸入電平：" + mediaLevel + " / 100 · 錄製 " + mediaElapsedMs / 1000 + " 秒")
@@ -532,8 +607,8 @@ private fun RecordScreen() {
 
         }
         if (activeTab == "設定") {
-        RecordSection("5. VoIP WhatsApp／Telegram（實驗性）") {
-            Text("必須由你在 Android 系統授權通知存取，且通話 App 標記通知類別為「通話」。本功能不閱讀訊息、聯絡人或來電姓名。")
+        RecordSection("5. 通訊 App 語音通話偵測（實驗）") {
+            Text("可辨識 LINE、WhatsApp、Telegram、Signal、Messenger、Discord、Meet 等 App 的通話類別通知；不讀取訊息及聯絡人。通知辨識不等於可以錄到對方聲音。")
             Text("裝置是否允許擷取 VoIP 雙向音訊仍需要實機測試。")
             Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                 Switch(checked = voipEnabled, onCheckedChange = {
@@ -551,6 +626,7 @@ private fun RecordScreen() {
                 context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
             }, modifier = Modifier.fillMaxWidth()) { Text("開啟 Android 通知存取設定") }
             Text(VoipCallNotificationListener.state, style = MaterialTheme.typography.bodySmall)
+            Text("已列入來源：" + VoipSourceRegistry.packages.values.distinct().joinToString("、"), style = MaterialTheme.typography.bodySmall)
         }
         }
         if (activeTab == "錄音庫") {
@@ -659,6 +735,21 @@ private fun RecordScreen() {
                                     } catch (e: Exception) { "加密失敗：" + e.message }
                                 }
                             }) { Text("加密") }
+                        }
+                        if (item.file.extension == "wav" && item.details?.source in SessionBundleExporter.sourceTypes) {
+                            OutlinedButton(onClick = {
+                                scope.launch {
+                                    feedback = try {
+                                        val exported = withContext(Dispatchers.IO) {
+                                            SessionBundleExporter.export(item, library.list())
+                                        }
+                                        recordings = library.list()
+                                        "同期來源已封存：" + exported.name + "；音源缺漏已列於 session.json"
+                                    } catch (e: Exception) {
+                                        "來源封存失敗：" + e.message
+                                    }
+                                }
+                            }) { Text("封存同期所有音軌") }
                         }
                         if (item.file.extension !in setOf("enc", "zip") && item.details?.source in setOf("CALL_MIX", "CALL_TX", "CALL_RX")) {
                             val pair = MultiTrackExporter.findBestPair(item, recordings)
