@@ -27,6 +27,7 @@ public final class ShellCaptureMain {
     private static final long SEGMENT_LIMIT_BYTES = 16L * 1024 * 1024;
     private static final File ROOT = new File("/data/local/tmp/record-sessions");
     private final String token;
+    private DualCallCapture dual;
     private AudioRecord input;
     private Thread captureThread;
     private volatile boolean capturing;
@@ -62,7 +63,10 @@ public final class ShellCaptureMain {
                 } finally { try { peer.close(); } catch (Exception ignored) {} }
                 if (server.quit) break;
             }
-        } finally { server.stopCapture(); }
+        } finally {
+            if (server.dual != null) server.dual.stop();
+            server.stopCapture();
+        }
     }
     /**
      * app_process does not have the normal Android Activity main looper.
@@ -129,7 +133,7 @@ public final class ShellCaptureMain {
         write(out, "OK");
         String cmd = line(in);
         if (cmd.startsWith("SELECT ")) {
-            if (capturing) { write(out, "ERR recording active"); return; }
+            if (capturing || dual != null) { write(out, "ERR recording active"); return; }
             String source = cmd.substring(7);
             switch (source) {
                 case "CALL_MIX": selectedSource = MediaRecorder.AudioSource.VOICE_CALL; break;
@@ -139,20 +143,39 @@ public final class ShellCaptureMain {
             }
             selectedName = source;
             write(out, "SELECTED " + selectedName);
+        } else if (cmd.equals("STATUS") && dual != null) {
+            write(out, dual.status());
         } else if (cmd.equals("STATUS")) {
             write(out, "STATE " + (capturing ? "CAPTURING" : "READY") + " " +
                 (sessionId == null ? "-" : sessionId) + " " + selectedName +
                 " LEVEL " + meterLevel + " ELAPSED_MS " +
                 (capturing ? (SystemClock.elapsedRealtimeNanos() - captureStartedNs) / 1000000L : 0L));
         } else if (cmd.equals("START")) {
-            write(out, startCapture());
-        } else if (cmd.equals("STOP")) {
-            write(out, stopCapture());
+            write(out, dual == null ? startCapture() : "ERR dual mode active");
+        } else if (cmd.equals("START_DUAL")) {
+            if (capturing || dual != null) {
+                write(out, "ERR another audio capture is active");
+            } else {
+                DualCallCapture candidate = new DualCallCapture(ROOT);
+                String result = candidate.start();
+                if (result.startsWith("CAPTURING_DUAL ")) dual = candidate;
+                write(out, result);
+            }
+        } else if (cmd.equals("STOP") || cmd.equals("STOP_DUAL")) {
+            if (dual != null) {
+                String result = dual.stop();
+                dual = null;
+                write(out, result);
+            } else if (cmd.equals("STOP_DUAL")) {
+                write(out, "ERR dual source not recording");
+            } else {
+                write(out, stopCapture());
+            }
         } else if (cmd.startsWith("FETCH ")) {
             String id = cmd.substring(6);
             if (!id.matches("[0-9a-fA-F-]{36}")) { write(out, "ERR invalid id"); return; }
             File f = new File(ROOT, id + ".pcm");
-            if (capturing || !f.isFile() || !f.getCanonicalFile().getParentFile().equals(ROOT.getCanonicalFile())) {
+            if (capturing || dual != null || !f.isFile() || !f.getCanonicalFile().getParentFile().equals(ROOT.getCanonicalFile())) {
                 write(out, "ERR file unavailable"); return;
             }
             long[] recovered = readSessionClockAndSource(id);
@@ -167,7 +190,7 @@ public final class ShellCaptureMain {
             out.flush();
         } else if (cmd.startsWith("DELETE ")) {
             String id = cmd.substring(7);
-            if (!id.matches("[0-9a-fA-F-]{36}") || capturing) { write(out, "ERR invalid state"); return; }
+            if (!id.matches("[0-9a-fA-F-]{36}") || capturing || dual != null) { write(out, "ERR invalid state"); return; }
             File f = new File(ROOT, id + ".pcm");
             boolean removed = f.delete() || !f.exists();
             File meta = sessionMetadata(id);
@@ -180,11 +203,13 @@ public final class ShellCaptureMain {
                 for (File f : files) {
                     String id = f.getName().substring(0, f.getName().length() - 4);
                     if (id.equals(sessionId) && capturing) continue;
+                    if (dual != null && dual.isCurrentId(id)) continue;
                     if (f.length() > 0 && pending.length() < 800) pending.append(' ').append(id);
                 }
             }
             write(out, pending.toString());
         } else if (cmd.equals("SHUTDOWN")) {
+            if (dual != null) { dual.stop(); dual = null; }
             stopCapture();
             quit = true; write(out, "BYE");
         } else write(out, "ERR unknown");

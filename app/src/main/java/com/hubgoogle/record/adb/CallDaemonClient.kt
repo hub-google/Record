@@ -68,6 +68,8 @@ class CallDaemonClient(private val context: Context) {
     }
     suspend fun start(): String = withContext(Dispatchers.IO) { command("START") }
     suspend fun stop(): String = withContext(Dispatchers.IO) { command("STOP") }
+    suspend fun startDual(): String = withContext(Dispatchers.IO) { command("START_DUAL") }
+    suspend fun stopDual(): String = withContext(Dispatchers.IO) { command("STOP_DUAL") }
     suspend fun shutdown(): String = withContext(Dispatchers.IO) { command("SHUTDOWN") }
     suspend fun removeAllPending(): Int = withContext(Dispatchers.IO) {
         // If an experimental notification-driven session is still open,

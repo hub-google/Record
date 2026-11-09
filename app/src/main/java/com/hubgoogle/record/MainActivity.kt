@@ -448,19 +448,33 @@ private fun RecordScreen() {
                     } catch (e: Exception) { feedback = "通話錄製失敗：" + e.message }
                 }
             }, modifier = Modifier.fillMaxWidth()) { Text("手動開始通話錄製") }
+            OutlinedButton(
+                enabled = consent && daemonReady && !monitorActive && manualId == null,
+                onClick = {
+                    scope.launch {
+                        feedback = try {
+                            val result = daemon.startDual()
+                            if (result.startsWith("CAPTURING_DUAL ")) {
+                                manualId = "DUAL"
+                                "正在嘗試同時錄製上行與下行；僅能透過回放證明有效"
+                            } else result
+                        } catch (error: Exception) { "雙音源錄製無法啟動：" + error.message }
+                    }
+                }, modifier = Modifier.fillMaxWidth()
+            ) { Text("實驗：同時開始 TX／RX（不支援即報錯）") }
             OutlinedButton(enabled = manualId != null, onClick = {
                 scope.launch {
                     val id = manualId ?: return@launch
                     try {
-                        val stopped = daemon.stop()
+                        val stopped = if (id == "DUAL") daemon.stopDual() else daemon.stop()
                         feedback = stopped
-                        if (stopped.startsWith("STOPPED ")) {
+                        if (stopped.startsWith("STOPPED ") || stopped.startsWith("STOPPED_DUAL ")) {
                             var saved = 0
                             for (pendingId in daemon.pending()) {
                                 daemon.fetch(pendingId)
                                 saved++
                             }
-                            feedback = "已保存 " + saved + " 個 WAV 片段"
+                            feedback = "已保存 " + saved + " 個 WAV 片段；雙向分離需驗證聽到的內容"
                             manualId = null
                             recordings = library.list()
                         }
