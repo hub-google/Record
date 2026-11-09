@@ -83,9 +83,16 @@ class Recordings(private val context: Context) {
     }
 
     fun deleteAll(): Int {
+        // The recordings directory may also contain interrupted .partial
+        // files not shown in the library. Privacy wipe must delete these too.
         var deleted = 0
-        for (entry in list()) if (remove(entry.file)) deleted++
-        if (list().isEmpty()) database.clearIndex()
+        for (file in dir.listFiles().orEmpty()) {
+            if (file.isFile && isOwned(file) && file.delete()) {
+                database.delete(file.name)
+                deleted++
+            }
+        }
+        if (dir.listFiles().orEmpty().none { it.isFile }) database.clearIndex()
         return deleted
     }
 

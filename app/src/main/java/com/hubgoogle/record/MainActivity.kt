@@ -301,6 +301,29 @@ private fun RecordScreen() {
             }
         }
         if (activeTab == "首頁") {
+        RecordSection("目前可取得的聲音來源") {
+            Text("下列只反映本機已保存的音檔，不代表 Android 支援所有聲音，也不代表已確認通話雙方。")
+            val groups = listOf(
+                "電信電話" to listOf("CALL_MIX", "CALL_TX", "CALL_RX"),
+                "LINE 語音" to listOf("VOIP_LINE"),
+                "其他通訊" to listOf("VOIP_WHATSAPP", "VOIP_WHATSAPP_BUSINESS",
+                    "VOIP_TELEGRAM", "VOIP_SIGNAL", "VOIP_MESSENGER", "VOIP_DISCORD", "VOIP_MEET"),
+                "音樂／遊戲／影片" to listOf("MEDIA_PLAYBACK"),
+                "獨立麥克風" to listOf("MIC")
+            )
+            groups.forEach { (label, sources) ->
+                val matching = recordings.filter { it.details?.source in sources &&
+                    it.file.extension == "wav" }
+                val meaningful = matching.count { it.details?.status !in setOf("SILENT", "EMPTY") }
+                Text(label + "：" + when {
+                    meaningful > 0 -> "有 " + meaningful + " 段音檔，內容仍需回放"
+                    matching.isNotEmpty() -> "僅有可能靜音的片段"
+                    else -> "尚無錄製證據"
+                }, style = MaterialTheme.typography.bodySmall)
+            }
+            Text("通知音／系統音／受保護 App：目前沒有通用免 Root 直接內錄管道；不以外放收音冒充已取得。",
+                style = MaterialTheme.typography.bodySmall)
+        }
         RecordSection("狀態與操作結果") {
             if (restartNotice) Text("偵測到手機重新啟動：通話錄音核心尚待驗證恢復", color = MaterialTheme.colorScheme.error)
             Text("通話音訊程序：" + if (daemonReady) "IPC 連線正常（音源尚須實機驗證）" else "尚未就緒")
