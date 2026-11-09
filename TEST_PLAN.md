@@ -108,3 +108,16 @@ CI 紀錄：https://github.com/hub-google/Record/actions
 | T42 | 錄音庫播放狀態 | 連續點兩個 WAV 不疊加；停止鍵立即釋放 MediaPlayer | NOT_TESTED |
 
 詳細執行步驟、如何判斷單邊無聲及證據規範請看 [DEVICE_ACCEPTANCE_PROTOCOL.md](DEVICE_ACCEPTANCE_PROTOCOL.md)。
+
+## 2026-11-09 回補原始需求後的案例
+
+| 案例 | 內容 | 真機狀態 |
+|---|---|---|
+| T43 | LINE 語音通話使用者授權通知、開始/結束觸發、實際雙方錄音 | NOT_TESTED |
+| T44 | Signal／Messenger／Discord／Meet 等通知分類的實際偵測及擷取 | NOT_TESTED |
+| T45 | 電信 CALL_MIX/或者 TX+RX、LINE/其他 VoIP、媒體、MIC 同期封存 ZIP（只放取得的音檔） | NOT_TESTED |
+| T46 | Session ZIP 中 missingSources 明列缺音軌，excludedSilentTracks 指出靜音，不能標 100% | 單測已加入，真機 NOT_TESTED |
+| T47 | 三個不同來源 48kHz 同步混音，依不同開始時間混入；保留原始檔 | 合成單測已加入，真機 NOT_TESTED |
+| T48 | 通話期間啟用 MediaProjection，拒絕擷取時不虛構媒體聲音 | NOT_TESTED |
+| T49 | 通知音、鈴聲、受保護影片等來源：Android 有無可行公開／shell 數位擷取路徑 | NOT_TESTED／部分無通用免 Root 存取權 |
+| T50 | 清除所有音檔包含 .partial，保留期限涵蓋 M4A/OGG | 真機 NOT_TESTED |

@@ -56,3 +56,17 @@ CI 只做原始碼編譯與測試，不發佈或上傳 APK。Android 12+ 真機�
 - CI 增加 Android lint 靜態檢測，仍不產出或提供 APK。
 
 詳見 [實機驗收步驟](DEVICE_ACCEPTANCE_PROTOCOL.md)。**這些增量代表程式碼與自動測試範圍，不等於已通過真機 P0/P1/P2。**
+
+## 2026-11-09 完整需求回補及錄音功能擴充
+
+這一輪將使用者最初的需求（**通話雙方＋LINE 等通訊語音＋通知／系統音＋遊戲、音樂和影片內部音訊，同時錄製及同期分軌**）明確恢復於 [PRD.md](PRD.md) FR-13；**需求不因 Android 限制被刪除**。
+
+新增程式碼：
+- `VoipSourceRegistry.kt`：新增 LINE、Signal、Messenger、Discord、Meet、WhatsApp Business 等通知通話類別辨識；只判斷 Android `CATEGORY_CALL`，**不等於有權錄下 App 通話音訊**。
+- `SessionBundleExporter.kt`：以實際 monotonic 時鐘為準，將同期電話、通訊、媒體與 MIC 來源之非靜音 WAV 分段封存 ZIP；`session.json` 明列未取得與靜音排除的來源，不虛構音檔。
+- `SessionMixer.kt`：最多一小時的多音源 48kHz 立體聲 PCM/WAV 離線混音，保留原始 WAV，依實際音源輸入數做增益控制；TX/RX 同在時不重複混入 CALL_MIX。
+- Compose UI 新增「同時錄製通話＋音樂／遊戲」、「停止並保存所有已啟動音軌」、「封存同期所有音軌」、「同期音源合成 WAV」及首頁來源覆蓋紀錄。
+- 修正本機全部刪除功能，使失敗中斷產生的 `.partial` 音檔也被納入清除；錄音保留期限包含 M4A／OGG。
+- 新增 `SessionBundleExporterTest` 和 `SessionMixerTest` 的 JVM 測試，與既有 Android Lint／編譯／單元測試一起跑 CI。
+
+**不能宣稱完成的部分：** 目前尚無任何實體 Android 手機通話雙方錄音成功的驗證、也沒有 LINE 通話、通知聲、所有 App 播放音、通話同時媒體可用的測試證據。Android 的 `AudioPlaybackCapture` 僅允許特定來源 usage 和來源應用同意的音訊；沒有一個非 Root API 可保證所有內部聲音都被抓到。程式碼功能已寫入 ≠ 實機成功。

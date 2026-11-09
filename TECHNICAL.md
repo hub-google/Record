@@ -443,3 +443,10 @@ val audioRecord = AudioRecord.Builder()
 `DualCallCapture.java` 使用同一個經自我 ADB 授權的 shell UID 進程，同時初始化 VOICE_UPLINK 和 VOICE_DOWNLINK；兩個獨立 PCM 及開始時戳由不同 recorder 保存。只有兩者初始化並開始成功才回報 CAPTURING_DUAL；實機回放前仍為 UNVERIFIED，不應因此對外宣稱獨立雙向音軌可用。
 
 `AcceptanceJournal.kt` 以本機 SQLite 音檔索引加 PCM SHA-256 唯一性來避免重複計算，按裝置 Build 雜湊分隔 10 通至少 9 通人工聽見雙方的最低記錄，這不取代獨立測試人員或 Android 真實音源驗證。
+
+## 2026-11-09 全來源覆蓋實作
+
+- `VoipSourceRegistry` 依通知套件名稱＋`CATEGORY_CALL` 分類 LINE／WhatsApp／Telegram 等通訊 App。**通知權限只提供事件判定，不授予 VoIP 音訊擷取權限**；即使觸發也不能視作有效雙向錄音。
+- `SessionBundleExporter` 讀取本機 SQLite 的來源、錄製起點 `elapsedRealtimeNanos` 和音質標籤，使用交疊時間窗、同一私有目錄等檢查選取真正存在的 WAV，輸出 ZIP＋`session.json`，記錄缺失來源與靜音排除，`allDeviceAudioCaptured=false`。
+- `SessionMixer` 對選定的來源做 48kHz stereo PCM16 最近鄰重採樣與按活動來源平均混音；TX/RX 都存在時，避免重複混入 CALL_MIX。沒有設備時鐘漂移補償，不能把合成檔當作通話雙方可錄製的證據。
+- 可操作介面先由 Android 正式 MediaProjection 系統授權，再嘗試經認證 shell 通話音源，個別保存來源結果；任一音源可能因 Android 音訊優先級或來源 App 政策而無聲。通知音、系統提示音和 DRM／受保護 App 音訊無法藉此保證取得。

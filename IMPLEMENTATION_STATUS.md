@@ -92,3 +92,18 @@
 **以上新增功能不改變核心限制：沒有真實 Pixel、Galaxy、Xiaomi/Poco 機器與雙方合法通話音訊，不能將 PRD 各階段標記為 PASS。** Android lint 靜態安全檢查和編譯單元測試結果以 GitHub Actions 每次 main 的實際紀錄為準。原始碼沒有宣稱可繞過 Google Phone／Android 的法定提示或安全權限。
 
 參閱 [實機驗收操作手冊](DEVICE_ACCEPTANCE_PROTOCOL.md) 與 [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md)。
+
+## 2026-11-09 需求一致性修正
+
+原始需求並非只有電信電話和遊戲；包含 **LINE 等語音 App、通知／系統音、影音播放、同時分軌及混音**。PRD 已補回 FR-13，避免未實現音源被當成已取消的需求。
+
+| 本輪補上的程式碼 | 狀態 | 真機證據 |
+|---|---|---|
+| LINE／Signal／Messenger／Discord／Meet／WhatsApp Business 通話通知辨識 | 已新增分類及啟用介面 | **NOT_TESTED；無法推論通話音訊能錄** |
+| 同一時間全部真實來源 ZIP，含缺失／靜音來源 | 已完成且有單元測試 | **NOT_TESTED** |
+| 多來源 WAV 時間軸混音 | 已完成且有三來源合成音測試 | **NOT_TESTED** |
+| 通話＋媒體一鍵請求、分來源開始／停止 | 已新增 UI | **NOT_TESTED；音訊可能互斥** |
+| 首頁音源覆蓋紀錄與缺失提示 | 已新增 UI | **NOT_TESTED** |
+| 通知／系統／受保護 App 的所有音訊 | 需求保留，尚無通用免 Root 音源 | **NOT_IMPLEMENTED／PLATFORM_BLOCKED** |
+
+**整體仍未達 PRD 的原始終極目標，不可說 100% 開發成功。** 以 Android 真機實測為必要驗收關卡；所有 CI 結果只證明原始碼編譯、靜態檢查和合成測試。
