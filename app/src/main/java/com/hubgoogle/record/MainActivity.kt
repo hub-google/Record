@@ -32,6 +32,7 @@ import com.hubgoogle.record.core.DeviceProbe
 import com.hubgoogle.record.core.CompatibilityMatrix
 import com.hubgoogle.record.data.Recordings
 import com.hubgoogle.record.media.PlaybackCaptureService
+import com.hubgoogle.record.media.MicCaptureService
 import com.hubgoogle.record.media.TestTonePlayer
 import com.hubgoogle.record.audio.TestToneWavVerifier
 import com.hubgoogle.record.audio.WavWaveform
@@ -99,6 +100,9 @@ private fun RecordScreen() {
     var daemonReady by remember { mutableStateOf(false) }
     var manualId by remember { mutableStateOf<String?>(null) }
     var mediaActive by remember { mutableStateOf(false) }
+    var micActive by remember { mutableStateOf(false) }
+    var micLevel by remember { mutableIntStateOf(0) }
+    var micState by remember { mutableStateOf("") }
     var selectedSource by remember { mutableStateOf("CALL_MIX") }
     var selectedFeature by remember { mutableStateOf("CALL_MIX") }
     var selectedOutcome by remember { mutableStateOf(matrix.result("CALL_MIX")) }
@@ -220,6 +224,9 @@ private fun RecordScreen() {
                 callLevel = 0
                 callElapsedMs = 0L
             }
+            micActive = MicCaptureService.active
+            micLevel = MicCaptureService.level
+            micState = MicCaptureService.status
             mediaActive = PlaybackCaptureService.active
             mediaLevel = PlaybackCaptureService.liveLevel
             mediaElapsedMs = if (mediaActive) android.os.SystemClock.elapsedRealtime() -
@@ -482,6 +489,23 @@ private fun RecordScreen() {
                 modifier = Modifier.fillMaxWidth()) { Text("停止測試音") }
             Text("僅錄製允許 AudioPlaybackCapture 的媒體／遊戲。通話與媒體同時錄製目前僅實驗性，不保證所有機型可用。",
                 style = MaterialTheme.typography.bodySmall)
+        }
+        RecordSection("獨立麥克風音軌（實驗）") {
+            Text("僅在你手動啟動時錄製。通話中 Android 可能讓麥克風音源靜音；本功能無法證明錄到通話對方。")
+            Text(micState)
+            Text("麥克風輸入電平：" + micLevel + " / 100")
+            LinearProgressIndicator(progress = { micLevel / 100f }, modifier = Modifier.fillMaxWidth())
+            Button(enabled = consent && !micActive, onClick = {
+                try {
+                    context.startForegroundService(Intent(context, MicCaptureService::class.java)
+                        .setAction(MicCaptureService.ACTION_START))
+                    feedback = "已要求啟用獨立麥克風錄音"
+                } catch (e: Exception) { feedback = "麥克風啟動失敗：" + e.message }
+            }, modifier = Modifier.fillMaxWidth()) { Text("開始錄製麥克風音軌") }
+            OutlinedButton(enabled = micActive, onClick = {
+                context.startService(Intent(context, MicCaptureService::class.java)
+                    .setAction(MicCaptureService.ACTION_STOP))
+            }, modifier = Modifier.fillMaxWidth()) { Text("停止並保存麥克風音軌") }
         }
 
         }
