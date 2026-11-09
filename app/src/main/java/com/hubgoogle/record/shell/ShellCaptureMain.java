@@ -1,5 +1,7 @@
 package com.hubgoogle.record.shell;
 
+import android.annotation.SuppressLint;
+
 import android.media.AudioFormat;
 import android.os.Looper;
 import android.os.SystemClock;
@@ -218,6 +220,9 @@ public final class ShellCaptureMain {
         byte[] x = a.getBytes(StandardCharsets.UTF_8), y = b.getBytes(StandardCharsets.UTF_8);
         return java.security.MessageDigest.isEqual(x, y);
     }
+    // Called only inside the shell UID process after main() checks UID 2000.
+    // Android may still deny the protected VOICE_CALL source; we return ERR.
+    @SuppressLint("MissingPermission")
     private String startCapture() {
         synchronized (lock) {
             if (capturing) return "CAPTURING " + sessionId;

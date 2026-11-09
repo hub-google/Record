@@ -1,5 +1,7 @@
 package com.hubgoogle.record.shell;
 
+import android.annotation.SuppressLint;
+
 import android.media.AudioFormat;
 import android.media.AudioRecord;
 import android.media.MediaRecorder;
@@ -42,6 +44,9 @@ final class DualCallCapture {
         Track(String name, int source, int sourceIndex) {
             this.name = name; this.source = source; this.sourceIndex = sourceIndex;
         }
+        // Permission resolution here is based on the explicitly paired shell
+        // UID, not ordinary APK runtime permission. start() catches denial.
+        @SuppressLint("MissingPermission")
         void init() throws Exception {
             int min = AudioRecord.getMinBufferSize(RATE, AudioFormat.CHANNEL_IN_MONO,
                 AudioFormat.ENCODING_PCM_16BIT);

@@ -4,8 +4,6 @@ import android.content.AttributionSource;
 import android.content.Context;
 import android.content.ContextWrapper;
 import android.os.Process;
-import java.lang.reflect.Constructor;
-import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 
 /**
@@ -33,30 +31,15 @@ public final class ShellAudioContext extends ContextWrapper {
             current.setAccessible(true);
             Object thread = current.invoke(null);
             if (thread == null) {
-                Constructor<?> constructor = threadClass.getDeclaredConstructor();
-                constructor.setAccessible(true);
-                thread = constructor.newInstance();
-                Field currentField = threadClass.getDeclaredField("sCurrentActivityThread");
-                currentField.setAccessible(true);
-                currentField.set(null, thread);
-                Field systemField = threadClass.getDeclaredField("mSystemThread");
-                systemField.setAccessible(true);
-                systemField.setBoolean(thread, true);
+                // Android 36 blocks direct reflection of ActivityThread's
+                // mSystemThread and mConfigurationController fields. Delegate
+                // initialization to the platform's own systemMain method,
+                // then report UNSUPPORTED if the OEM denies this shell route.
+                Method systemMain = threadClass.getDeclaredMethod("systemMain");
+                systemMain.setAccessible(true);
+                thread = systemMain.invoke(null);
             }
-            if (android.os.Build.VERSION.SDK_INT >= 31) {
-                try {
-                    Class<?> controllerClass = Class.forName("android.app.ConfigurationController");
-                    Class<?> internalClass = Class.forName("android.app.ActivityThreadInternal");
-                    Constructor<?> ctor = controllerClass.getDeclaredConstructor(internalClass);
-                    ctor.setAccessible(true);
-                    Object controller = ctor.newInstance(thread);
-                    Field field = threadClass.getDeclaredField("mConfigurationController");
-                    field.setAccessible(true);
-                    field.set(thread, controller);
-                } catch (ReflectiveOperationException ignored) {
-                    // Optional OEM compatibility hook. The actual context must be nonnull.
-                }
-            }
+            if (thread == null) throw new IllegalStateException("No shell ActivityThread");
             Method getSystemContext = threadClass.getDeclaredMethod("getSystemContext");
             getSystemContext.setAccessible(true);
             Object value = getSystemContext.invoke(thread);
