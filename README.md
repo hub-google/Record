@@ -45,3 +45,14 @@ CI 只做原始碼編譯與測試，不發佈或上傳 APK。Android 12+ 真機�
 **狀態：** GitHub CI 的綠色檢查只保證原始碼編譯與單元測試通過；本工作環境無法操作實體手機或發起真正的雙方同意通話，因此 PRD 要求的 3 品牌 × 每機 10 次真實雙向通話、60 分鐘通話、VoIP／藍牙／重開機、通話＋媒體互斥測試都仍未驗收。不可視為正式產品已完成。
 
 最新逐項表見 [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md)，發布清單見 [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md)。
+
+## 2026-11-09 原始碼增量（依照 PRD）
+
+- 已加入兩路音訊時間軸的離線 48 kHz stereo WAV 混音（不覆寫原始音軌）；以真實 monotonic capture start 時間對齊，採用固定增益及可預期的 resampling，不宣稱實體聲學／電信時鐘漂移已校正。
+- 使用者可以獨立啟動可見的 MIC AudioRecord 音軌，與通話和 MediaProjection 分開儲存。Android 在通話中可能阻擋或靜音 MIC，故必須實測。
+- shell 端新增可選擇 START_DUAL／STOP_DUAL 的 VOICE_UPLINK 與 VOICE_DOWNLINK 同步啟動實驗；若 OEM 不允許雙音源會明確報錯，**不會回退到麥克風或虛構成功音軌**。
+- 新增逐通真機驗收紀錄（錄音 PCM SHA-256 去重），至少 10 通、至少 9 通雙方聽得見且涵蓋來去電，才能達到「使用者人工回報」的最低門檻。此結果仍非第三方驗證。
+- 錄音庫控制器防止多段錄音重疊播放，可手動停止播放；混音及驗收邏輯有 JVM 單元測試。
+- CI 增加 Android lint 靜態檢測，仍不產出或提供 APK。
+
+詳見 [實機驗收步驟](DEVICE_ACCEPTANCE_PROTOCOL.md)。**這些增量代表程式碼與自動測試範圍，不等於已通過真機 P0/P1/P2。**

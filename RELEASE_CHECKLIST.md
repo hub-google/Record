@@ -23,3 +23,8 @@
 Android 普通 App 沒有能保證雙向通話數位音軌的公開 API。使用者自行配對 ADB 的 shell 方案仍依賴廠牌音訊 HAL、Android 版本及政策。Android MediaProjection 不允許繞過來源 App 的擷取限制。
 
 此清單是尚未完成的發行驗收門檻，不是宣稱已通過驗收。
+## 新增程式碼，但不得誤認封版
+
+截至 2026-11-09，已有可嘗試的同時 TX/RX shell 錄製路線、獨立 MIC 音軌、雙音源 WAV 同步混音和 per-device 10 通回放驗收日誌。這些功能的實際音源可用性都必須在 PRD 指定的 Android 實體裝置上測試。即使 Kotlin/Java 編譯、JVM 單測及 lint 全通過，也**不代表 Android 電信通話音源可被 shell 同時取得**。
+
+如無設備測試證據，本專案只能維持原始碼開發／實驗狀態，不對外宣稱為正式完成的雙向通話錄音 App。

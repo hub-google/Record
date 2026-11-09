@@ -79,3 +79,16 @@
 新增實際源碼：CALL_TX/CALL_RX 手動音源選擇，通話 16 MiB 與媒體 32 MiB 分段，傳輸 PCM SHA-256 校驗、UUID 去重與意外中斷收取；AAC/Opus 選擇性轉碼；錄音庫重新命名和 Android SAF 文件匯出；受控 440/880Hz 測試播放器及頻譜辨識、匿名兼容性報告；VoIP CATEGORY_CALL 白名單、錄音錯誤通知、低空間保護、隱私清除含可存取的 shell 片段。增加 WAV/頻譜/ZIP JSON 單元測試。
 
 **重要狀態不變：** CI 通過只代表編譯和單元測試，不能驗證真實手機的雙向電話聲音、通話與媒體並行、VoIP 或獨立 TX/RX 同時擷取。完整實機 P0–P3 驗收仍為 NOT_TESTED；無設備與實際雙方同意通話不能宣稱 100% 完成。
+
+## 2026-11-09 原始碼進度補充（覆蓋上方舊版未實作描述）
+
+| 需求 | 這次實作 | 自動化檢查 | 手機實測 |
+|---|---|---|---|
+| FR-09 多訊源同步／混音 | 增加 SynchronizedMixer 按 capture start 對齊 CALL 和 MEDIA，合成 48kHz stereo PCM；保留原始來源；另增 MIC 可見前景錄製 | WAV header、不同採樣率及起始時間混音測試 | NOT_TESTED |
+| FR-10 TX/RX | shell 增加 START_DUAL／STOP_DUAL，兩個 AudioRecord 同時請求 VOICE_UPLINK 和 VOICE_DOWNLINK，各寫自己 UUID／.info／PCM，偵測不支援即報錯 | Android Java 原始碼編譯 | NOT_TESTED；系統可能拒絕雙來源或其中一軌靜音 |
+| FR-02／12 兼容性驗收 | 每支手機 Build 個別儲存含 SHA-256 的人工雙方聽覺驗收；10 通／9 通數值門檻、來去電均需有，避免同一錄音反覆計數 | JVM TrialEvaluator 多案例測試 | 無設備操作；NOT_TESTED |
+| FR-05 檔案播放 | 僅允許單一 MediaPlayer；新增停止播放鍵和資源釋放 | Android 編譯 | NOT_TESTED |
+
+**以上新增功能不改變核心限制：沒有真實 Pixel、Galaxy、Xiaomi/Poco 機器與雙方合法通話音訊，不能將 PRD 各階段標記為 PASS。** Android lint 靜態安全檢查和編譯單元測試結果以 GitHub Actions 每次 main 的實際紀錄為準。原始碼沒有宣稱可繞過 Google Phone／Android 的法定提示或安全權限。
+
+參閱 [實機驗收操作手冊](DEVICE_ACCEPTANCE_PROTOCOL.md) 與 [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md)。

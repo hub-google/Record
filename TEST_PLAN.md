@@ -95,3 +95,16 @@
 - 仍須 Android 真機才能驗證 FLAC／AAC／Opus、MediaProjection、ADB 自我配對、Android Keystore 與雙向通話，全部標為 NOT_TESTED，不能以 CI 綠燈冒充結果。
 
 CI 紀錄：https://github.com/hub-google/Record/actions
+
+## 2026-11-09 新增實測案例（尚待手機操作）
+
+| ID | 內容 | 通過條件 | 實機 |
+|---|---|---|---|
+| T37 | START_DUAL 同時雙向音源 | 裝置允許兩個獨立的 CALL_TX／CALL_RX WAV，同一通合法測試通話兩人交替發聲；TX 只錄預期本機、RX 只錄預期遠端，不受錯軌污染 | NOT_TESTED |
+| T38 | 不支援 DualCallCapture | 裝置拒絕 AudioRecord 時顯示 ERR，不生成假成功紀錄、不切 MIC 當替代 | NOT_TESTED |
+| T39 | MIC 獨立音軌 | 有可見通知、人工允許、停止後完整 WAV，通話中可被 OS 靜音須如實標示 | NOT_TESTED |
+| T40 | 合併時間軸 WAV | 通話 16k mono 和媒體 48k stereo 各自 100ms offset；輸出 48k stereo、時戳正確、可回放 | 先通過 JVM 合成測試；真機 NOT_TESTED |
+| T41 | 10 通 P0 驗收日誌 | 10 個獨立 SHA-256、9 通以上兩方可聽見、含來電與去電；不達標不能標支援 | 先通過 JVM 門檻測試；真機 NOT_TESTED |
+| T42 | 錄音庫播放狀態 | 連續點兩個 WAV 不疊加；停止鍵立即釋放 MediaPlayer | NOT_TESTED |
+
+詳細執行步驟、如何判斷單邊無聲及證據規範請看 [DEVICE_ACCEPTANCE_PROTOCOL.md](DEVICE_ACCEPTANCE_PROTOCOL.md)。

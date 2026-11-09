@@ -431,3 +431,15 @@ val audioRecord = AudioRecord.Builder()
 ---
 
 **追溯備註**：以上 GitHub 專案存在、README 與授權說明已於 2026-11-06 核對；專案的實際裝置相容性多數來自各作者公開報告，**不是 Record 團隊目前已完成的裝置測試**。官方 Android API 的限制優先於第三方 README 宣稱。
+
+## 2026-11-09 實作架構備註
+
+現行檔案索引實作是 `RecordingDatabase.kt` 的 SQLiteOpenHelper（不是最初架構圖所列的 Room），但已具有私有 SQLite index、source、duration、PCM SHA-256、quality 及 elapsed time 欄位；任何後續架構轉移需做保留原始音檔的 schema migration，不可直接刪除舊資料。
+
+`SynchronizedMixer.kt` 採兩路獨立 WAV、每路起始 elapsedRealtimeNanos、固定 48kHz stereo PCM16 的最近鄰重採樣、每來源 0.5 gain 混音及分塊緩衝讀取。這只是音訊輸出時間軸組合，不是漂移估計。通話雙向仍需人工確認。
+
+`MicCaptureService.kt` 為使用者手動啟動的 `FOREGROUND_SERVICE_TYPE_MICROPHONE` 路線；它不是通話音源的 fallback。通話中 Android 可能靜音普通 MIC，因此必須分來源評估。
+
+`DualCallCapture.java` 使用同一個經自我 ADB 授權的 shell UID 進程，同時初始化 VOICE_UPLINK 和 VOICE_DOWNLINK；兩個獨立 PCM 及開始時戳由不同 recorder 保存。只有兩者初始化並開始成功才回報 CAPTURING_DUAL；實機回放前仍為 UNVERIFIED，不應因此對外宣稱獨立雙向音軌可用。
+
+`AcceptanceJournal.kt` 以本機 SQLite 音檔索引加 PCM SHA-256 唯一性來避免重複計算，按裝置 Build 雜湊分隔 10 通至少 9 通人工聽見雙方的最低記錄，這不取代獨立測試人員或 Android 真實音源驗證。
