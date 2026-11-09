@@ -29,5 +29,12 @@ jobs:
         with:
           gradle-version: '9.7.1'
       - name: Compile Kotlin and Java, run unit tests and static lint (no APK published)
-        run: ./gradlew --no-daemon :app:compileDebugKotlin :app:compileDebugJavaWithJavac :app:testDebugUnitTest :app:lintDebug
+        run: |
+          if ! ./gradlew --no-daemon :app:compileDebugKotlin :app:compileDebugJavaWithJavac :app:testDebugUnitTest :app:lintDebug; then
+            echo "===== Complete Android Lint findings ====="
+            if [ -f app/build/intermediates/lint_intermediate_text_report/debug/lintReportDebug/lint-results-debug.txt ]; then
+              cat app/build/intermediates/lint_intermediate_text_report/debug/lintReportDebug/lint-results-debug.txt
+            fi
+            exit 1
+          fi
 
